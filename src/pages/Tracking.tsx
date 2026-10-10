@@ -192,9 +192,14 @@ export function Tracking() {
           <strong>{rub(order.total)}</strong>
         </div>
         {menu && <ShopInfo settings={menu.settings} />}
-        <Link to="/" className="text-link">
-          Вернуться в меню
-        </Link>
+        <div className="tracking-links">
+          <Link to="/orders" className="text-link">
+            Все мои заказы
+          </Link>
+          <Link to="/" className="text-link">
+            Вернуться в меню
+          </Link>
+        </div>
       </div>
     </main>
   );

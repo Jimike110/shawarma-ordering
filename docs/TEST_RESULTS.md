@@ -4,14 +4,14 @@ Verified locally on **2026-10-10** using Docker Desktop, PostgreSQL 17, Node 22,
 
 | Check                                                  | Result                                                                                     |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| Frontend unit tests                                    | **21 passed**                                                                              |
+| Frontend unit tests                                    | **22 passed**                                                                              |
 | TypeScript and Vite production build                   | Passed                                                                                     |
 | Go unit and real PostgreSQL integration tests          | Passed                                                                                     |
 | Go race detector (`go test -race ./...`)               | Passed with PostgreSQL integration enabled                                                 |
 | Go static analysis (`go vet ./...`)                    | Passed                                                                                     |
 | Standalone API/migration Docker build                  | Passed                                                                                     |
 | Linux amd64 Netlify function build and adapter tests   | Passed                                                                                     |
-| End-to-end browser scenarios                           | **12 scenarios passed** across the full run and focused history rerun; see history pass     |
+| End-to-end browser scenarios                           | **14 passed**, no retries; see separate history page pass                                  |
 | Responsive storefront                                  | Checked at **320, 390, 768, 1440px**                                                       |
 | Local shop preview after applying confirmed settings   | No horizontal overflow or page errors at all four widths                                   |
 | Pre-upgrade backup restoration and migration           | Passed; existing order count stayed **1 → 1**, migration ledger has 2 versions             |
@@ -23,7 +23,7 @@ Backend/race/backup evidence below comes from the earlier production-readiness p
 
 ## Coverage
 
-Frontend tests cover persisted cart recovery/validation, option-aware variants and totals, cart limits, polling cleanup, avoiding overlapping requests, connectivity recovery, retained data during failures, and clearing data when the private tracking link changes. History tests additionally cover legacy recovery despite malformed storage, metadata validation/deduplication, retaining more than five orders, newest-first ordering after viewing an old order, storage write failures, change notifications, recovery of token-only numbers/dates, connectivity retries, other-tab updates, and aborting late recovery responses.
+Frontend tests cover persisted cart recovery/validation, option-aware variants and totals, cart limits, polling cleanup, avoiding overlapping requests, connectivity recovery, retained data during failures, and clearing data when the private tracking link changes. History tests additionally cover legacy recovery despite malformed storage, metadata validation/deduplication, retaining more than five orders, newest-first ordering after viewing an old order, storage write failures, change notifications, recovery of token-only numbers/dates, connectivity retries, other-tab updates, aborting late recovery responses, and keeping the home count reactive without fetching old order metadata.
 
 PostgreSQL integration tests cover checkout idempotency and concurrency, rollback, stale prices, unavailable products, snapshots, options, manual pause, normal/overnight schedules, retries after closing, preserving old active orders despite more than 300 recent closed orders, named staff attribution/revocation, cancellation reasons, migration preservation, session cleanup, opt-in retention, and protection of active orders. Existing API tests also cover passwords, Origin checks, private tracking, secure cookies, session expiry/logout, and persistent rate limits.
 
@@ -41,10 +41,27 @@ Browser scenarios:
 10. Legacy token-only order №101 recovers its number/date; eight saved orders survive reload and an older tracking visit in newest-first order, with no horizontal overflow at all four widths.
 11. Opening personal tracking links saves them; switching between links does not copy the previous order's number onto the new link while its response is pending.
 12. An unavailable legacy order retains its personal link and uses «Заказ по личной ссылке» rather than «Последний заказ».
+13. Empty history remains accessible from the home shortcut, provides a menu action, supports direct `/orders` URLs/reloads, and redirects old `/#orders` anchors.
+14. Eighty saved orders only add a count to the home screen; all eighty remain accessible on the separate history page in newest-first order.
 
 Screenshots in `artifacts/` include `storefront-*.png`, `kitchen-settings.png`, `kitchen-queue.png`, and `shop-*.png`. The `shop-*` set captures the running local app with **Я люблю шаверму**, **Белорусская ул., 4**, and daily **09:00–22:00**. The store correctly shows closed outside those hours. Screenshots of the isolated test kitchen contain temporary fixture information that was restored after the test.
 
 ## Reproduce
+
+### Separate order history page
+
+The latest pass on 2026-10-10 moves history out of the catalogue to `/orders`. The home screen keeps a shortcut/count, and tracking offers “Все мои заказы”. History recovery runs on its own page; the home count subscribes to storage updates without fetching legacy receipts. Existing links/storage and checkout behavior remain intact.
+
+- **22 frontend tests passed**, including the new count-only subscription check; TypeScript checking and the production build passed.
+- All **14 browser scenarios passed in one run**, with no retries, through Vite in the fresh disposable database. The five history cases cover legacy recovery, reload persistence, older-order sorting, private-link switching, unavailable links, empty/direct/legacy-anchor navigation, and an 80-order history absent from the home screen. Existing checkout/retry, kitchen, and responsive scenarios also passed.
+- The history page fits **320, 390, 768, 1440px**; screenshots are `artifacts/orders-{width}.png`. The phone and desktop captures were visually inspected. These contain synthetic order receipts from the test shop, not actual customer orders.
+- The live `/orders` URL returns **200** with the Vite client, and `/api/health` reports `ok`. No order was submitted to the real shop database.
+
+```powershell
+docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml down
+docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml run --build --rm browser sh -c 'npm run check && npm run test:e2e'
+docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml down
+```
 
 ### Order history fix
 

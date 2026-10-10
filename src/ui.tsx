@@ -31,7 +31,11 @@ export function Layout() {
   useEffect(() => {
     document.title =
       (data?.settings.shop_name || 'Шаверма на районе') +
-      (location.pathname === '/kitchen' ? ' · Кухня' : ' · Заказ с собой');
+      (location.pathname === '/kitchen'
+        ? ' · Кухня'
+        : location.pathname === '/orders'
+          ? ' · Мои заказы'
+          : ' · Заказ с собой');
   }, [data?.settings.shop_name, location.pathname]);
   return (
     <>

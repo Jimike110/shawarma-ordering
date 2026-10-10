@@ -8,7 +8,7 @@ import { useSavedOrders } from '../useSavedOrders';
 import { rub, type Product } from '../types';
 
 export function Shop() {
-  const orders = useSavedOrders();
+  const orders = useSavedOrders({ recoverMetadata: false });
   const { data: menu, error, loading, refresh } = useMenu();
   const { lines, setQuantity } = useCart();
   const navigate = useNavigate(),
@@ -22,9 +22,13 @@ export function Shop() {
   const [detailCount, setDetailCount] = useState(1),
     [feedback, setFeedback] = useState('');
   useEffect(() => {
-    if (menu && ['#menu', '#orders'].includes(location.hash))
+    if (location.hash === '#orders') {
+      navigate('/orders', { replace: true });
+      return;
+    }
+    if (menu && location.hash === '#menu')
       document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth' });
-  }, [menu !== null, location.hash]);
+  }, [menu !== null, location.hash, navigate]);
   useEffect(() => {
     if (!feedback) return;
     const id = setTimeout(() => setFeedback(''), 2500);
@@ -137,12 +141,10 @@ export function Shop() {
               </span>
             </div>
           </div>
-          {orders.length > 0 && (
-            <a className="recent-link" href="#orders">
-              Мои заказы <span>{orders.length}</span>
-              <ArrowRight size={16} />
-            </a>
-          )}
+          <Link className="recent-link" to="/orders">
+            Мои заказы {orders.length > 0 && <span>{orders.length}</span>}
+            <ArrowRight size={16} />
+          </Link>
         </section>
         <div className="store-layout">
           <div className="catalog">
@@ -288,34 +290,6 @@ export function Shop() {
                 Назовите номер заказа и оплатите на месте. Сообщим о готовности на странице заказа.
               </p>
             </section>
-            {orders.length > 0 && (
-              <section id="orders" className="saved-orders">
-                <h2>Мои заказы</h2>
-                <p className="fine-print">Заказы, сохранённые в этом браузере.</p>
-                <div>
-                  {orders.map((order) => (
-                    <Link key={order.token} className="saved-order" to={'/track#' + order.token}>
-                      <span>
-                        <b>{order.number ? 'Заказ №' + order.number : 'Заказ по личной ссылке'}</b>
-                        <small>
-                          {order.created_at && !Number.isNaN(Date.parse(order.created_at))
-                            ? new Date(order.created_at).toLocaleDateString('ru-RU', {
-                                timeZone: 'Europe/Moscow',
-                                day: 'numeric',
-                                month: 'long',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : 'Открыть заказ'}
-                        </small>
-                      </span>
-                      <ArrowRight size={18} />
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
           </div>
           <aside className="panel desktop-basket">
             <h2>Ваш заказ{count > 0 && <span className="basket-counter">{count}</span>}</h2>

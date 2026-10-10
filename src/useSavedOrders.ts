@@ -3,14 +3,14 @@ import { api } from './api';
 import { ORDER_HISTORY_CHANGED, savedOrders, saveOrder } from './orderHistory';
 import type { Order } from './types';
 
-export function useSavedOrders() {
+export function useSavedOrders({ recoverMetadata = true }: { recoverMetadata?: boolean } = {}) {
   const [orders, setOrders] = useState(savedOrders);
   useEffect(() => {
     const controller = new AbortController();
     const attempted = new Set<string>();
     let recovering = false;
     async function recover() {
-      if (recovering || controller.signal.aborted) return;
+      if (!recoverMetadata || recovering || controller.signal.aborted) return;
       recovering = true;
       try {
         // Sequential requests avoid flooding the API when migrating a large history.
@@ -67,6 +67,6 @@ export function useSavedOrders() {
       window.removeEventListener('storage', storage);
       window.removeEventListener('online', online);
     };
-  }, []);
+  }, [recoverMetadata]);
   return orders;
 }

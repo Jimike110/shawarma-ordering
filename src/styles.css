@@ -726,13 +726,18 @@ b {
   font-size: 14px;
   margin: 0 0 20px;
 }
-.saved-orders {
-  margin-top: 28px;
+.orders-page {
+  max-width: 900px;
+  padding-top: 28px;
+  min-height: 60vh;
 }
-.saved-orders > div {
+.saved-order-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
 }
 .saved-order {
   background: #fff;
@@ -748,6 +753,17 @@ b {
   color: var(--muted);
   font-size: 12px;
   margin-top: 4px;
+}
+.saved-order > span {
+  min-width: 0;
+}
+.saved-order > svg {
+  flex-shrink: 0;
+}
+.tracking-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
 }
 .footer {
   display: flex;
@@ -2153,7 +2169,7 @@ input[type='checkbox'] {
     gap: 9px 17px;
     font-size: 11px;
   }
-  .saved-orders > div {
+  .saved-order-list {
     grid-template-columns: 1fr;
   }
   .footer {

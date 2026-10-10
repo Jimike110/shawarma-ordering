@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
 
 // Synthetic private links only: these checks never create/read actual customer orders.
 const token = (number: number) => String(number).padEnd(43, '_');
@@ -39,7 +40,13 @@ test('legacy order 101 recovers its number and all eight saved orders stay visib
     },
   );
   await page.goto('/');
-  const links = page.locator('#orders .saved-order');
+  await expect(page.locator('.saved-order')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /^Мои заказы/ })).toContainText('8');
+  expect(recoveries).toBe(0);
+  await page.getByRole('link', { name: /^Мои заказы/ }).click();
+  await expect(page).toHaveURL(/\/orders$/);
+  await expect(page.getByRole('heading', { name: 'Мои заказы', exact: true })).toBeVisible();
+  const links = page.locator('.saved-order-list .saved-order');
   await expect(links).toHaveCount(8);
   await expect(links.last()).toContainText('Заказ №101');
   await expect(links.first()).toContainText('Заказ №108');
@@ -59,16 +66,21 @@ test('legacy order 101 recovers its number and all eight saved orders stay visib
   expect(recoveries).toBe(initialRecoveries);
   await links.last().click();
   await expect(page.getByRole('heading', { name: 'ЗАКАЗ №101', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Вернуться в меню', exact: true }).click();
+  await page.getByRole('link', { name: 'Все мои заказы', exact: true }).click();
   await expect(links).toHaveCount(8);
   await expect(links.first()).toContainText('Заказ №108');
   await expect(links.last()).toContainText('Заказ №101');
+  await mkdir('artifacts', { recursive: true });
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
+    await page.screenshot({ path: `artifacts/orders-${width}.png`, fullPage: true });
   }
+  await page.getByRole('link', { name: 'Вернуться в меню', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator('.saved-order')).toHaveCount(0);
 });
 
 test('opening a personal link saves its number and switching links never copies old metadata', async ({
@@ -95,10 +107,10 @@ test('opening a personal link saves its number and switching links never copies 
   ).toBe(1);
   release();
   await expect(page.getByRole('heading', { name: 'ЗАКАЗ №102', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Вернуться в меню', exact: true }).click();
-  await expect(page.locator('#orders .saved-order')).toHaveCount(2);
-  await expect(page.locator('#orders .saved-order').first()).toContainText('Заказ №102');
-  await expect(page.locator('#orders .saved-order').last()).toContainText('Заказ №101');
+  await page.getByRole('link', { name: 'Все мои заказы', exact: true }).click();
+  await expect(page.locator('.saved-order')).toHaveCount(2);
+  await expect(page.locator('.saved-order').first()).toContainText('Заказ №102');
+  await expect(page.locator('.saved-order').last()).toContainText('Заказ №101');
 });
 
 test('an unavailable legacy order keeps its personal link with an honest fallback label', async ({
@@ -114,11 +126,50 @@ test('an unavailable legacy order keeps its personal link with an honest fallbac
     (legacy) => localStorage.setItem('shawarma-last-order', legacy),
     token(101),
   );
-  await page.goto('/');
-  const link = page.locator('#orders .saved-order');
+  await page.goto('/orders');
+  const link = page.locator('.saved-order');
   await expect(link).toContainText('Заказ по личной ссылке');
   await expect(link).toHaveAttribute('href', '/track#' + token(101));
   expect(await page.evaluate(() => localStorage.getItem('shawarma-last-order') !== null)).toBe(
     true,
   );
+});
+
+test('empty history has a menu action, a direct URL, and redirects old history anchors', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Мои заказы', exact: true }).click();
+  await expect(page).toHaveURL(/\/orders$/);
+  await expect(page).toHaveTitle(/Мои заказы/);
+  await expect(page.getByRole('heading', { name: 'Пока нет заказов' })).toBeVisible();
+  await page.getByRole('link', { name: 'Перейти в меню', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto('/orders');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Пока нет заказов' })).toBeVisible();
+  await page.goto('/#orders');
+  await expect(page).toHaveURL(/\/orders$/);
+  await expect(page.getByRole('heading', { name: 'Мои заказы', exact: true })).toBeVisible();
+});
+
+test('eighty saved orders only add a count on the home screen and remain accessible on their page', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const orders = Array.from({ length: 80 }, (_, i) => ({
+      token: String(101 + i).padEnd(43, '_'),
+      number: 101 + i,
+      created_at: new Date(Date.UTC(2026, 9, 1, i)).toISOString(),
+    }));
+    localStorage.setItem('shawarma-orders', JSON.stringify(orders));
+  });
+  await page.goto('/');
+  const shortcut = page.getByRole('link', { name: /^Мои заказы/ });
+  await expect(shortcut).toContainText('80');
+  await expect(page.locator('.saved-order')).toHaveCount(0);
+  await shortcut.click();
+  await expect(page.locator('.saved-order')).toHaveCount(80);
+  await expect(page.locator('.saved-order').first()).toContainText('Заказ №180');
+  await expect(page.locator('.saved-order').last()).toContainText('Заказ №101');
 });

@@ -27,10 +27,11 @@ The original shop setup is retained in `config/shop.json`, including the origina
 ## Architecture
 
 - `src/main.tsx`: React 19, React Router, shared cart and menu providers.
-- Routes: `/` menu, `/checkout`, `/track#PRIVATE_TOKEN`, `/kitchen`.
+- Routes: `/` menu, `/orders` browser order history, `/checkout`, `/track#PRIVATE_TOKEN`, `/kitchen`. Legacy `/#orders` anchors redirect to `/orders`.
 - `src/menu.tsx`: one shared menu polling request for layout/customer/staff pages.
 - `src/cart.tsx`: persistent cart, canonical option-aware line keys, current option pricing, 20 items per variant, 50 total items, 30 distinct lines.
 - `src/pages/Checkout.tsx`: frozen pending submission with persistent exact-payload retries; do not discard pending attempts after ambiguous errors such as network loss or HTTP 429.
+- `src/pages/Orders.tsx`, `src/orderHistory.ts`, `src/useSavedOrders.ts`: dedicated browser history, legacy metadata recovery, and change subscriptions. The catalogue subscribes for its count with recovery disabled; history repair runs on `/orders`.
 - `src/usePolling.ts`: nonoverlapping requests, cleanup/reconnection, completion predicate for terminal customer orders.
 - `backend/internal/app`: validation, API, transactional PostgreSQL store, security, integration tests.
 - `backend/internal/app/schema.sql` + `migrations/*.sql`: migrations embedded in the binary, applied transactionally once under an advisory lock, recorded in `schema_migrations`.
@@ -51,7 +52,7 @@ The original shop setup is retained in `config/shop.json`, including the origina
 - Product details, ingredient/allergen fields, configurable options/extras, distinct variant quantities, and server-verified pricing. Historic receipts preserve purchased names, option labels, and prices.
 - Consistent paused/closed/unavailable states; reductions/removals remain possible while additions stop. Cart limits match backend validation.
 - Checkout locks its submitted snapshot. After a lost response, retries/reloads reuse the same key, items, note, name, and expected prices, preventing duplicate orders.
-- Private tracking and all locally saved order links under “Мои заказы”, newest first with numbers and Moscow dates/times. Legacy token-only entries automatically recover metadata; successful tracking visits save their link/metadata without reordering older orders ahead of newer ones. History reacts to other-tab storage changes and keeps unavailable links. Late/cancelled/completed messages, cancellation reasons, configured contact/directions, and no automatic tracking polling once an order closes.
+- Private tracking and all locally saved order links on the separate `/orders` “Мои заказы” page, newest first with numbers and Moscow dates/times. The home screen only shows a shortcut/count, including an accessible empty history; never render the full history in the catalogue. Legacy token-only entries recover metadata on the history page; the home count uses `useSavedOrders({ recoverMetadata: false })`. Successful tracking visits save their link/metadata without reordering older orders ahead of newer ones, and offer “Все мои заказы”. History reacts to other-tab storage changes and keeps unavailable links. Late/cancelled/completed messages, cancellation reasons, configured contact/directions, and no automatic tracking polling once an order closes.
 - Kitchen shows all active orders regardless of age plus up to 300 recently closed orders. It has mobile bottom navigation, clickable queue counters, 5/10/15/20/30-minute ETA shortcuts, custom time entry, suggested cancellation reasons with explicit confirmation, availability switches, new-order notices/sound, and shop/product/options editors. Settings time presets and weekly schedule copy affect the draft until explicitly saved.
 - Configurable opening schedule including overnight shifts. A manual pause overrides schedule; enabled empty schedules close intake.
 - Optional named staff users via `STAFF_USERS` bcrypt-hash JSON. Every account has the kitchen role. Password changes/removal revoke previous named sessions; menu/order/settings changes record the staff name transactionally in `audit_events`.
@@ -128,6 +129,8 @@ The subsequent catalogue pass rechecked 11 frontend tests in the Linux browser i
 The Vite setup was verified against the running shop with a temporary CSS property: it applied and was removed without navigation, the WebSocket connected, the API/menu remained available, and private environment/backup files returned 403. The final configuration passed 11 frontend tests/build and all 9 existing browser scenarios through Vite in the disposable database. See `docs/TEST_RESULTS.md`. Refresh an existing production-build browser tab once to load the Vite client; subsequent frontend edits update automatically.
 
 The order-history fix passed **21 frontend tests** and the TypeScript/production build. All 9 existing browser scenarios passed in the disposable Vite stack; all 3 new history scenarios passed after correcting a test assumption about StrictMode's repeated initial request. Synthetic links/mock receipts verify №101 recovery, eight retained orders, persistence/order sorting, link registration/switching, and unavailable-link preservation at four widths. No real shop orders were created. See `docs/TEST_RESULTS.md` for the full-run/focused-rerun distinction.
+
+The subsequent separate-history-page pass passed **22 frontend tests**, TypeScript/production build, and all **14 browser scenarios in one run**, with no retries, in the disposable Vite stack. `/orders` was checked at four widths with phone/desktop screenshot inspection, empty/direct/legacy-anchor navigation, and an 80-order history that adds only a count on the home screen. The live Vite `/orders` URL and API health responded successfully. No real shop orders were created; verification details are in `docs/TEST_RESULTS.md`.
 
 ## Remaining launch work
 

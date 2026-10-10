@@ -13,6 +13,15 @@ beforeEach(() => {
 });
 
 describe('recovering saved order numbers', () => {
+  it('keeps the home count reactive without fetching legacy order metadata', () => {
+    localStorage.setItem('shawarma-last-order', token);
+    const hook = renderHook(() => useSavedOrders({ recoverMetadata: false }));
+    expect(hook.result.current).toEqual([{ token }]);
+    act(() => saveOrder({ token: 'b'.repeat(43), number: 102, created_at }));
+    expect(hook.result.current).toHaveLength(2);
+    expect(api).not.toHaveBeenCalled();
+  });
+
   it('resolves a token-only order and updates both the UI and stored history', async () => {
     localStorage.setItem('shawarma-last-order', token);
     vi.mocked(api).mockResolvedValue({ number: 101, created_at });
