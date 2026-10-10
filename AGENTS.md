@@ -24,6 +24,9 @@ The running shop's initial three demo products were replaced with the 19-item Ya
 
 The original shop setup is retained in `config/shop.json`, including the original Я люблю шаверму name. `scripts/configure-shop.mjs` applies that setup to the running local app using credentials loaded from `.env`, preserves other settings, and logs out afterward. It only targets localhost or the Compose `web` service and supports the shared local login. Reapplying it would overwrite the current Я@Ша name; review staff edits before rerunning setup. Named staff should configure the shop through Kitchen → Settings instead.
 
+
+`scripts/prepare-shop-transfer.mjs` exports the current local public catalogue/settings, checks photo checksums, and prepares ignored `artifacts/shop-transfer.json` / `artifacts/import-shop.sql` without connecting to a target database. The pure SQL file can be run in Neon's SQL Editor after migrations. It is atomic, preserves orders and unrelated products, matches by image, removes only untouched demo fixtures, and refuses conflicting target staff edits. Reapplying an identical snapshot retains product IDs. This is a one-time initial-data transfer, not continuous sync. A prepared artifact passed isolated PostgreSQL rollback/repeat/conflict/order-preservation checks; **no Neon transfer was executed**. See `docs/DEPLOYMENT.md` for the exact steps.
+
 ## Architecture
 
 - `src/main.tsx`: React 19, React Router, shared cart and menu providers.
@@ -32,6 +35,7 @@ The original shop setup is retained in `config/shop.json`, including the origina
 - `src/cart.tsx`: persistent cart, canonical option-aware line keys, current option pricing, 20 items per variant, 50 total items, 30 distinct lines.
 - `src/pages/Checkout.tsx`: frozen pending submission with persistent exact-payload retries; do not discard pending attempts after ambiguous errors such as network loss or HTTP 429.
 - `src/pages/Orders.tsx`, `src/orderHistory.ts`, `src/useSavedOrders.ts`: dedicated browser history, legacy metadata recovery, and change subscriptions. The catalogue subscribes for its count with recovery disabled; history repair runs on `/orders`.
+- `app.Open` requires a nonblank explicit `DATABASE_URL` and refuses PostgreSQL driver's localhost/OS-user defaults. Direct `go run ./cmd/migrate` does not load `.env`; export the Neon direct URL in the same terminal. The user also uses Git Bash/MINGW64, so provide Bash commands there rather than PowerShell `$env:` assignments; secure prompt examples are in `docs/DEPLOYMENT.md`.
 - `src/usePolling.ts`: nonoverlapping requests, cleanup/reconnection, completion predicate for terminal customer orders.
 - `backend/internal/app`: validation, API, transactional PostgreSQL store, security, integration tests.
 - `backend/internal/app/schema.sql` + `migrations/*.sql`: migrations embedded in the binary, applied transactionally once under an advisory lock, recorded in `schema_migrations`.
@@ -43,6 +47,12 @@ The original shop setup is retained in `config/shop.json`, including the origina
 - `compose.dev.yaml`: exposes PostgreSQL locally only for host development.
 - `compose.e2e.yaml`: isolated browser-test stack using a disposable tmpfs database. Use project name `shawarma-review` to keep it separate from the shop.
 - `compose.e2e.vite.yaml`: optional Vite frontend for that disposable test stack, using internal WebSocket port 80.
+
+## Selected deployment direction (2026-10-10)
+
+The user selected **one separate GitHub repository, one Netlify site (React build + Go functions), and one Neon project per business**, owned by the user's accounts. Local editing and Docker/Vite remain the development workflow. Keep each business's data, credentials, origins, and deployment configuration separate. Do not substitute the previously suggested VPS path or another hosting platform without a new user instruction.
+
+`docs/DEPLOYMENT.md` records the setup and provider constraints. Runtime uses Neon's TLS pooled URL; explicit migrations/backup/restore use its direct URL. Production secrets must not be shared with deploy previews; previews need an isolated empty/sanitized database or stay disabled. The user deployed `https://shawarma-ordering.netlify.app`; on 2026-10-10 supplied `Function init:` logs show execution but database initialization falling back to `user=sbx_user1051 database=` and the absent local `/tmp/.s.PGSQL.5432` socket. The function is not receiving the intended Neon configuration. Set `DATABASE_URL` through Netlify environment settings for Production with Functions scope (or default all scopes), then redeploy. Local `.env` and `netlify.toml` variables do not supply the runtime secret. Successful Neon connectivity/migrations/menu transfer remain unverified; do not claim launch readiness. Official Netlify docs checked on 2026-10-10 stop accepting Lambda-compatibility deployments from **2027-07-01**; a long-term migration decision remains open. Do not claim the modern TypeScript wrapper automatically supports this Go binary. The agent did not provision public resources.
 
 ## Implemented improvements
 
@@ -77,6 +87,8 @@ Order ETA presets persist immediately and announce the result. Settings presets 
 - Public tracking excludes customer name/note, internal ID, and bearer token. Sequential order numbers cannot retrieve orders.
 - Browser order history uses private tokens, never numeric lookup. Retain all valid saved links; do not reintroduce a five-order cap or discard entries on request/storage failures. Consume the legacy `shawarma-last-order` key only after the complete `shawarma-orders` history is saved. Repair missing metadata through the private endpoint, abort on navigation, and do not attach stale tracking data to a different token. Clearing browser storage or the old five-link truncation cannot be reversed without the original personal link; there is no customer account/device sync.
 - Staff cookies are HttpOnly, SameSite=Strict, and Secure on HTTPS. Staff writes require the exact configured Origin.
+- Shared `KITCHEN_PASSWORD` sessions use a stable HMAC credential identity derived from the password and `SESSION_SECRET`, separate from the freshly salted bcrypt login hash. Never compare persisted sessions with newly generated bcrypt hashes: that logs staff out across server/function instances. Explicit `KITCHEN_PASSWORD_HASH` and named `STAFF_USERS` retain hash-based revocation. Shared password/secret changes invalidate sessions; normal refresh/cold starts must not. Deploying the fix requires one new login for old shared-password sessions; no schema migration is needed. Cross-instance/rotation/logout regressions passed against isolated PostgreSQL on 2026-10-10; live Netlify verification remains outstanding.
+- The user now reports successful kitchen login followed by logout on refresh on the deployed site, suggesting the earlier missing-database configuration was addressed. The confirmed local cross-instance shared-password defect explains this behavior when `KITCHEN_PASSWORD` is used; deployment of the correction and live hosted checks remain outstanding. Do not continue presenting the earlier `/tmp` connection failure as a newly verified current outage.
 - Default Compose only publishes nginx. API `TRUST_PROXY=true` relies on nginx overwriting the client-IP header; never expose that API port directly.
 - The local Vite override publishes the same localhost-only frontend port and proxies `/api` privately. Its proxy overwrites `X-Real-IP` and keeps the browser Origin intact. Vite file serving denies environment files, backups/artifacts, backend source, and private configuration directories. Do not set unrestricted allowed hosts/CORS or expose this development server publicly.
 - Expired sessions/counters are cleaned automatically. Order deletion is disabled by default (`ORDER_RETENTION_DAYS=0`); do not enable it without an explicit retention choice. Active orders must never be deleted by maintenance.
@@ -84,7 +96,7 @@ Order ETA presets persist immediately and announce the result. Settings presets 
 
 ## Working and verification commands
 
-Host Node/npm are absent in the current Windows environment; Docker Desktop and Go are available. Docker CLI may need sandbox escalation. Source directory contains spaces, so quote paths. The folder currently has no `.git` repository; don't assume `git status` works.
+Host Node/npm are absent in the current Windows environment; Docker Desktop and Go are available. Docker CLI may need sandbox escalation. Source directory contains spaces, so quote paths. The user initialized a Git repository; `main` was confirmed on 2026-10-10. Preserve user edits and check the current working tree before changing files. The user also runs Go commands in Git Bash/MINGW64.
 
 Local app:
 
@@ -134,13 +146,15 @@ The subsequent separate-history-page pass passed **22 frontend tests**, TypeScri
 
 ## Remaining launch work
 
+Latest backend check: the missing-`DATABASE_URL` guard and focused Go adapter/proxy regressions pass. The full Go unit run currently fails two existing checkout-name expectations (`empty_name` and `long_name`) against the current optional-name validation; resolve that mismatch before claiming a fully green backend suite. This check deliberately used an empty `TEST_DATABASE_URL`, skipped PostgreSQL integration, and did not run migrations against local shop/Neon data. See `docs/TEST_RESULTS.md`.
+
 1. Confirm current menu availability, complete ingredients/allergens, phone, and any weekly exceptions to 09:00–22:00. Prices/photos/portion sizes were imported from the user-selected Yandex listing on 2026-10-10; update future changes through Kitchen → Menu. Demo mode is already disabled in the running shop.
-2. Choose public hosting/domain, HTTPS termination, and production database. No cloud deployment is authorized or configured by the current task.
+2. Complete the user-selected separate GitHub repo + Netlify site + Neon project setup for this business. The user has deployed `https://shawarma-ordering.netlify.app`, but function logs show missing effective Neon configuration; correct runtime `DATABASE_URL` and redeploy before checking hosted migrations/menu. Verify the final origin and production secrets. Resolve the Go adapter's 2027-07-01 Netlify lifecycle constraint.
 3. Configure named staff identities/passwords for actual staff. Shared login remains available for the local demo; role separation is a future feature.
 4. Choose an encrypted off-machine backup destination and an external uptime alert destination. Local backup health and service health checks exist; they are not remote alerts.
 5. Choose retention/archival policies if required. Closed-order deletion stays off; audit events remain retained.
-6. Initialize version control and connect CI when the user chooses a repository. Existing GitHub Actions configuration has not run on GitHub.
-7. The Netlify adapter is retained, but recheck provider support before deploying it. Standalone Docker/Go is the verified local path.
+6. Verify/connect the chosen GitHub remote and CI. Local Git is initialized on `main`; remote configuration and actual GitHub Actions execution have not been checked.
+7. Verify Go function packaging/routing/cookies against Netlify and Neon, explicitly migrate/import real menu/settings, arrange hosted maintenance/backups, and run launch checks. Standalone Docker/Go remains the verified local development/test path; the selected public deployment is Netlify + Neon.
 
 ## Detailed references
 
@@ -151,4 +165,4 @@ The subsequent separate-history-page pass passed **22 frontend tests**, TypeScri
 - `docs/DESIGN.md`: interface principles, typography provenance, responsive behaviour, interaction rules, and design verification.
 - `docs/MENU_SOURCE.md`: the dated Yandex catalogue, photo provenance, explicit transactional import, and preserved data invariants.
 - `docs/TEST_RESULTS.md`: current verification evidence and limits.
-- `docs/DEPLOYMENT.md`: existing Netlify deployment guide; provider lifecycle notes must be rechecked before relying on them.
+- `docs/DEPLOYMENT.md`: selected per-business GitHub/Netlify/Neon setup, pooled/direct database URLs, preview isolation, launch checks, and Go runtime lifecycle constraint.

@@ -1,6 +1,6 @@
 # Я люблю шаверму
 
-A pickup ordering app built with React, TypeScript, Vite, Go, PostgreSQL, and nginx. Source is included locally; this folder does not currently contain a Git repository.
+A pickup ordering app built with React, TypeScript, Vite, Go, PostgreSQL, and nginx. Source is included locally; the Git repository is initialized on `main`.
 
 ## Run on Windows
 
@@ -49,7 +49,7 @@ Original shop setup: **Я люблю шаверму**, **Белорусская 
 docker compose -f compose.yaml -f compose.tools.yaml run --rm frontend-tools node scripts/configure-shop.mjs
 ```
 
-The script preserves other settings and requires the shared local kitchen login. For named accounts, use Kitchen → Settings. The running app uses **19 items with prices, portion sizes, and locally hosted photos** from the user-selected Yandex Maps menu, checked on 2026-10-10; demo mode is disabled. A fresh database starts with demo fixtures until the explicit [catalogue import](docs/MENU_SOURCE.md) is applied. Phone and ingredient/allergen information remain unset. Photo provenance: `public/images/CREDITS.md`.
+The script preserves other settings and requires the shared local kitchen login. For named accounts, use Kitchen → Settings. The running app uses **19 items with prices, portion sizes, and locally hosted photos** from the user-selected Yandex Maps menu, checked on 2026-10-10; demo mode is disabled. A fresh database starts with demo fixtures until the explicit [catalogue import](docs/MENU_SOURCE.md) is applied. Full ingredient/allergen information remains unset. Photo provenance: `public/images/CREDITS.md`.
 
 ## Development and verification
 
@@ -114,4 +114,4 @@ Read [AGENTS.md](AGENTS.md) first when handing this project to another agent. Se
 
 This app handles one pickup shop. It does not include online payments, delivery, customer accounts, SMS/push, multiple shops, distinct staff permission levels, or financial reconciliation. Customers need their private link to retrieve an order. The separate `/orders` “Мои заказы” page shows all links still saved in this browser, newest first, with order numbers and Moscow dates/times. The home screen only shows a shortcut/count, so saved history never extends the catalogue. The page supports direct URLs/reloads, an empty state, and returning from tracking; old `/#orders` anchors redirect here. Token-only entries from the old format recover their number/date on the history page through the private tracking endpoint; opening a personal tracking link also saves it here. History does not sync between devices, and clearing browser storage removes it. Orders discarded by the former five-link limit can only be restored by opening their original personal links.
 
-For a public launch, supply verified shop information and original product photos, configure HTTPS, individual staff access, an off-machine backup destination, and uptime alerts. The Netlify adapter remains included as an alternative build target; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and recheck platform support before choosing it.
+The selected public deployment is a separate **GitHub repository + Netlify site (React and Go functions) + Neon project for each business**, under the user's accounts. Local development stays on Docker/Vite. The user deployed `https://shawarma-ordering.netlify.app`; supplied function logs currently show database initialization failing because the intended Neon configuration is not reaching the runtime. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the environment-variable fix, runtime/migration database URLs, preview isolation, real-menu transfer, credentials, and launch verification. The current Go adapter uses Netlify's Lambda compatibility mode, which stops accepting deployments on **July 1, 2027**; successful live operation and its long-term migration path still need verification/decision. Before launch, confirm shop information/current availability, configure individual staff access, hosted backups/maintenance, and uptime monitoring.

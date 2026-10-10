@@ -1,6 +1,6 @@
 # Running the shop
 
-The app supports a single pickup location and payment at collection. Current kitchen settings use **Я@Ша**, **Белорусская ул., 4, Санкт-Петербург**, and **09:00–22:00 Moscow time**, interpreted as daily. `config/shop.json` retains the original Я люблю шаверму setup name; the README documents applying it locally and reviewing current staff edits first. The running shop uses the 19-item catalogue, prices, portion sizes, and local photos from the user-selected Yandex Maps listing; demo mode is disabled. See [menu source/import](MENU_SOURCE.md) before applying the catalogue to a fresh database. Missing contact details and complete ingredient/allergen information are explicitly left unset; staff must confirm current stock and any schedule exceptions.
+The app supports a single pickup location and payment at collection. Current local kitchen settings, checked on 2026-10-10, use **Я@Ша**, **Белорусская ул., 4, Санкт-Петербург**, and daily **11:00–22:00 Moscow time**, with 10-minute preparation and a staff-filled phone number. Рыба-Фиш is unavailable. `config/shop.json` retains the original Я люблю шаверму name and 09:00 opening; review current staff edits before applying it. The running shop uses the 19-item catalogue, prices, portion sizes, and local photos from the user-selected Yandex Maps listing; demo mode is disabled. See [menu source/import](MENU_SOURCE.md) before applying the catalogue to a fresh database and the [hosted shop transfer](DEPLOYMENT.md#transfer-the-current-menu-and-shop-settings-into-a-fresh-hosted-database) to copy current public data to Neon. Full ingredient/allergen information is still unset; staff must confirm contact accuracy, current stock, and schedule exceptions.
 
 ## Daily operation
 
@@ -16,6 +16,8 @@ The current local frontend is in Vite hot-reload mode at the usual `localhost:51
 - Product options have stable IDs, labels, and an extra price in whole rubles; a zero price represents a free change. Historic receipts keep the selected labels and paid prices. Removing an option prevents new orders with it but does not change existing receipts.
 
 ## Named staff access
+
+Kitchen sessions last 12 hours and should survive page reloads and server/function restarts. Shared `KITCHEN_PASSWORD` access uses a stable session identity independent of bcrypt's per-process salt; changing the shared password or `SESSION_SECRET` requires a new login. Deploying the cross-instance session fix once also requires a new shared-password login. Named accounts and explicit password hashes revoke sessions when their configured hash changes.
 
 The existing kitchen password continues to work for local demos. For individual access, set `STAFF_USERS` to a JSON object of usernames and bcrypt hashes. All named accounts have the kitchen role; this app does not implement different permission levels. Names are attributed to product, settings, and order mutations in `audit_events`, in the same database transaction as the mutation.
 
@@ -93,4 +95,4 @@ The Netlify function does not have a background maintenance loop; schedule datab
 
 Serve the site through HTTPS; set the exact `PUBLIC_ORIGIN`, `COOKIE_SECURE=true`, strong credentials, and a stable random session secret. Only nginx publishes a local port in the default Compose file. The Go service trusts the nginx client-IP header and remains private to the container network. Do not expose that API port directly while `TRUST_PROXY=true`.
 
-The default port binds to `127.0.0.1` for local use. A public domain/TLS termination layer and production database destination still need to be selected and configured. This work updates the local app; it does not create a cloud deployment.
+The default port binds to `127.0.0.1` for local use. The selected hosted setup is a separate GitHub repository, Netlify site with Go functions, and Neon project per business. The user deployed `https://shawarma-ordering.netlify.app`; hosted database configuration and initial shop-data transfer still need verification. See [deployment instructions](DEPLOYMENT.md) for runtime secrets, current-data transfer, maintenance, launch checks, and the Go adapter's platform lifecycle constraint. The agent has not provisioned the cloud resources or applied the shop transfer to Neon.

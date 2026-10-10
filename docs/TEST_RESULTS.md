@@ -1,5 +1,13 @@
 # Verification results
 
+**Latest session check (2026-10-10):** reproduced HTTP 401 when a shared-password login created under one `LoadConfig()` was validated under a second independently salted configuration. After separating session identity from bcrypt salt, the new PostgreSQL-backed regressions pass: shared login survives instance changes and can access protected orders; password or secret changes reject the old session; logout revokes it for both instances. Explicit password-hash reload and rotation also pass. Existing named-staff revocation/audit, complete PostgreSQL API workflow, secure-cookie/configuration, trusted-proxy, missing-database-URL, and Netlify routing/cookie regressions passed in the same focused run. Tests used isolated schemas in the disposable `shawarma-review` database, never the real shop or Neon. No frontend changes were made, and live Netlify login/reload has not been verified. The full backend suite still has the unrelated checkout-name expectations described below.
+
+The corrected backend also passed `go vet ./...` and a Linux Netlify function build with `CGO_ENABLED=0`. The disposable database was stopped after verification.
+
+**Latest shop-transfer check (2026-10-10):** `scripts/prepare-shop-transfer.mjs` read the local public API, verified all 19 photo checksums, and prepared public-only JSON/SQL artifacts. In the separate `shawarma-review` PostgreSQL 17 database, an intentional audit-insert failure rolled back catalogue/settings changes and preserved an existing synthetic order. A successful run imported 19 products with current settings and the unavailable Рыба-Фиш item; reapplying retained all product IDs/data, settings, and the complete original order snapshot. Differing target settings and product edits each caused the expected refusal. The import was not applied to the real local database or Neon. These targeted checks do not resolve the existing checkout-name test mismatch below.
+
+**Latest backend check (2026-10-10, migration configuration fix):** the missing-`DATABASE_URL` guard and focused Go adapter/proxy regressions passed. The full Go unit run currently fails the two existing checkout-name assertions (`empty_name` and `long_name`): they expect rejection, while current checkout validation permits those names. PostgreSQL integration tests were intentionally skipped for this check (`TEST_DATABASE_URL` empty); no migration or database mutation was performed. Earlier backend results in the table below predate this name-validation mismatch. Frontend behavior was not changed by the database-URL guard.
+
 Verified locally on **2026-10-10** using Docker Desktop, PostgreSQL 17, Node 22, Go 1.25.5, and headless Chromium. No external deployment was performed.
 
 | Check                                                  | Result                                                                                     |
@@ -47,6 +55,18 @@ Browser scenarios:
 Screenshots in `artifacts/` include `storefront-*.png`, `kitchen-settings.png`, `kitchen-queue.png`, and `shop-*.png`. The `shop-*` set captures the running local app with **Я люблю шаверму**, **Белорусская ул., 4**, and daily **09:00–22:00**. The store correctly shows closed outside those hours. Screenshots of the isolated test kitchen contain temporary fixture information that was restored after the test.
 
 ## Reproduce
+
+### Migration configuration fix
+
+`app.Open` now rejects blank/whitespace database URLs before invoking the PostgreSQL driver, preventing accidental localhost/OS-user fallback when running migrations or starting the API. `docs/DEPLOYMENT.md` now includes Git Bash/MINGW64 secure-prompt instructions alongside PowerShell examples. Go does not automatically load `.env`; the intended target URL must be exported in the same shell. Local Git was verified as initialized on `main`; remote service status was not inspected.
+
+Focused verification passed without database access:
+
+```powershell
+docker compose -f compose.yaml -f compose.tools.yaml run --rm -e TEST_DATABASE_URL= backend-tools go test ./... -run 'TestOpenRequiresExplicitDatabaseURL|TestProxyPreservesRoutingBodyAndCookies|TestTrustedProxyClientIP' -count=1
+```
+
+The full unit run exposed the two pre-existing checkout-name expectation failures noted above. No real shop or Neon database was migrated or modified by this verification.
 
 ### Separate order history page
 
@@ -150,4 +170,4 @@ These checks establish local correctness for the tested workflows. They do not e
 
 The 19-item menu/prices/photos/portion sizes were imported from the user-selected Yandex Maps listing on 2026-10-10, matching the Saint Petersburg address. Demo mode is disabled in the running shop. Staff must confirm current stock, phone, complete ingredient/allergen information, and weekly exceptions to the user's daily hours. The import preserved current kitchen settings, including the Я@Ша name; the original setup file still contains Я люблю шаверму.
 
-Public hosting/domain, TLS termination, individual production staff credentials, encrypted off-machine backups, and external uptime alerts remain to be configured. The GitHub Actions workflow is included but has not run on GitHub; this folder currently has no Git repository. The Netlify function compiled locally, but live provider/database connectivity and current platform support were not verified in this improvement pass.
+The user subsequently supplied the HTTPS deployment `https://shawarma-ordering.netlify.app` and function logs on 2026-10-10. The function executes but fails database initialization, falling back to the Netlify sandbox user and a local `/tmp` PostgreSQL socket instead of Neon. The runtime configuration fix is documented in `DEPLOYMENT.md`; successful hosted database connectivity, migration/menu transfer, and HTTPS staff cookies remain unverified. A direct API fetch through the web tool was unavailable, so this diagnosis uses the supplied logs rather than a successful live API check. Individual production staff credentials, encrypted off-machine backups, and external uptime alerts remain to be verified/configured. The local Git repository is initialized on `main`; GitHub remote configuration and actual CI execution were not checked.

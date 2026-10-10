@@ -20,6 +20,9 @@ var migrations embed.FS
 type Store struct{ DB *sql.DB }
 
 func Open(ctx context.Context, dsn string) (*Store, error) {
+	if strings.TrimSpace(dsn) == "" {
+		return nil, errors.New("DATABASE_URL is not set; export the target database connection URL before starting the API or running migrations (Go does not load .env automatically)")
+	}
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, err

@@ -24,9 +24,11 @@ type Config struct {
 	Origin       string
 	Secret       string
 	PasswordHash []byte
-	Secure       bool
-	TrustProxy   bool
-	StaffUsers   map[string][]byte
+	// Stable identity for an environment-supplied shared password, independent of bcrypt's salt.
+	PasswordCredential string
+	Secure             bool
+	TrustProxy         bool
+	StaffUsers         map[string][]byte
 }
 
 func LoadConfig() (Config, error) {
@@ -70,8 +72,20 @@ func LoadConfig() (Config, error) {
 		if e != nil {
 			return c, e
 		}
+		m := hmac.New(sha256.New, []byte(c.Secret))
+		_, _ = m.Write([]byte("shared-kitchen-session-v1\x00"))
+		_, _ = m.Write([]byte(password))
+		c.PasswordCredential = base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 	}
 	return c, nil
+}
+
+func (c Config) credentialHash(hash []byte) string {
+	if len(c.StaffUsers) == 0 && c.PasswordCredential != "" {
+		return c.PasswordCredential
+	}
+	// Explicit bcrypt hashes remain stable and changes still revoke existing sessions.
+	return Hash(string(hash))
 }
 
 type API struct {
@@ -280,7 +294,7 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := randomToken()
-	if e := a.Store.CreateNamedSession(r.Context(), token, name, Hash(string(hash))); e != nil {
+	if e := a.Store.CreateNamedSession(r.Context(), token, name, a.Config.credentialHash(hash)); e != nil {
 		fail(w, e)
 		return
 	}
@@ -307,7 +321,7 @@ func (a *API) staff(next http.HandlerFunc) http.HandlerFunc {
 		if len(a.Config.StaffUsers) > 0 {
 			hash = a.Config.StaffUsers[name]
 		}
-		if !ok || len(hash) == 0 || (credential != "" && credential != Hash(string(hash))) {
+		if !ok || len(hash) == 0 || (credential != "" && credential != a.Config.credentialHash(hash)) {
 			reply(w, 401, map[string]string{"error": "Сессия истекла. Войдите снова."})
 			return
 		}

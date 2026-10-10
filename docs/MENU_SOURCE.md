@@ -29,6 +29,10 @@ Only the three **untouched original demo rows** are removed, checked by ID, name
 
 The PostgreSQL bootstrap demo catalogue remains for fresh databases and automated fixtures. Do not edit an already-applied schema/migration to change a running shop's content.
 
+## Transfer current staff data to Neon
+
+Use `scripts/prepare-shop-transfer.mjs` and the [deployment transfer instructions](DEPLOYMENT.md#transfer-the-current-menu-and-shop-settings-into-a-fresh-hosted-database) when launching the hosted shop. Unlike the manifest-only catalogue import, this reads the current local public API and includes current stock, composition/options, preparation time, phone, name, address, and schedule. The latest staff-edited schedule is 11:00–22:00 daily, not the original 09:00 opening time. It produces pure SQL suitable for the SQL Editor, without orders or credentials. Review the companion JSON before applying. Conflicting hosted staff edits abort the transfer; future operational updates belong in the hosted kitchen panel.
+
 ## Imported catalogue
 
 | Item                            | Portion | Price |
