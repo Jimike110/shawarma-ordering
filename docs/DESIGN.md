@@ -26,7 +26,9 @@ This is a **single-location pickup app**. Do not add delivery switches, fake dis
 5. Checkout separates **Получение**, **Ваши данные**, and **Оплата**. Pickup and payment at collection are clearly selected. Guest name is required, comment is optional. A visible receipt allows review and quantity changes; desktop submission is in the summary, mobile submission stays at the bottom.
 6. Submitting freezes the exact order. Preserve the same payload/request key through timeout, response loss, 429, and reload. Pending attempts cannot be edited and must not become a new order just because the interface has changed. Definite validation/conflict responses allow correction.
 
-Keep private tracking, recent-order links, server-calculated prices, historic receipts, and Moscow timestamps intact during visual changes.
+7. **Мои заказы** shows every order still saved in this browser, newest first. Each link uses its actual order number and Moscow date/time (including the year). Recover missing numbers/dates from legacy token-only entries through their private endpoint; use «Заказ по личной ссылке» if recovery is unavailable. Never call an arbitrary unnumbered entry «Последний заказ». Successful tracking visits also save the link, without promoting an old order above newer orders. Keep the browser/device scope explicit; this is not an account or a list of other customers' orders.
+
+Keep private tracking, complete local order history, server-calculated prices, historic receipts, and Moscow timestamps intact during visual changes. Never discard history because a request fails, cap it at five entries, or attach a previous tracking response to a different private link. Clearing browser storage removes saved links; orders already discarded by the old cap require their original personal link to be restored.
 
 ## Kitchen on a phone
 
@@ -45,4 +47,4 @@ Use native buttons, labels, checkboxes, forms, switches, and dialogs. Preserve v
 
 Validate storefront, product details, checkout, kitchen queue, settings, and option editor at **320, 390, 768, and 1440px**. Check actual screenshots as well as scroll-width assertions. Test the font loading with Cyrillic/ruble text, immediate ETA persistence, draft-only settings presets, quick availability changes, product quantities/options, and the existing lost-response retry flow. Use the isolated browser-test stack, never real shop orders.
 
-See `tests/e2e/design.spec.ts`, `tests/e2e/improvements.spec.ts`, `tests/e2e/order.spec.ts`, and `docs/TEST_RESULTS.md`. Chromium checks do not replace a real-device iOS/Safari check or a full accessibility audit.
+See `tests/e2e/design.spec.ts`, `tests/e2e/improvements.spec.ts`, `tests/e2e/order.spec.ts`, `tests/e2e/history.spec.ts`, and `docs/TEST_RESULTS.md`. History regressions use synthetic private links and mocked tracking receipts. Chromium checks do not replace a real-device iOS/Safari check or a full accessibility audit.

@@ -76,11 +76,6 @@ export function Layout() {
         <Link to="/kitchen" className="staff-link">
           Вход для сотрудников <ArrowUpRight size={14} />
         </Link>
-        <small>
-          {data?.settings.demo_mode && 'Демонстрационное меню и цены. '}
-          Фото показывают пример подачи. Состав и аллергены уточняйте у сотрудников, если они не
-          указаны в меню.
-        </small>
       </footer>
     </>
   );

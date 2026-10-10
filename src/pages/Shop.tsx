@@ -4,10 +4,11 @@ import { ArrowRight, Clock3, Plus, X, MapPin, ShoppingBag, Search } from 'lucide
 import { cartCount, cartTotal, invalidLine, lineKey, MAX_ITEMS, unitPrice, useCart } from '../cart';
 import { useMenu } from '../menu';
 import { CartItems, FoodImage, Loading, Notice, Quantity, ShopInfo } from '../ui';
-import { savedOrders } from '../orderHistory';
+import { useSavedOrders } from '../useSavedOrders';
 import { rub, type Product } from '../types';
 
 export function Shop() {
+  const orders = useSavedOrders();
   const { data: menu, error, loading, refresh } = useMenu();
   const { lines, setQuantity } = useCart();
   const navigate = useNavigate(),
@@ -55,7 +56,6 @@ export function Shop() {
         .toLocaleLowerCase('ru')
         .includes(query.toLocaleLowerCase('ru')),
   );
-  const orders = savedOrders();
   const detailProduct = menu.products.find((p) => p.id === selected?.id);
   const detailLine = detailProduct ? { product_id: detailProduct.id, quantity: 1, options } : null;
   const detailQty = detailLine
@@ -291,19 +291,23 @@ export function Shop() {
             {orders.length > 0 && (
               <section id="orders" className="saved-orders">
                 <h2>Мои заказы</h2>
+                <p className="fine-print">Заказы, сохранённые в этом браузере.</p>
                 <div>
                   {orders.map((order) => (
                     <Link key={order.token} className="saved-order" to={'/track#' + order.token}>
                       <span>
-                        <b>{order.number ? 'Заказ №' + order.number : 'Последний заказ'}</b>
+                        <b>{order.number ? 'Заказ №' + order.number : 'Заказ по личной ссылке'}</b>
                         <small>
                           {order.created_at && !Number.isNaN(Date.parse(order.created_at))
                             ? new Date(order.created_at).toLocaleDateString('ru-RU', {
                                 timeZone: 'Europe/Moscow',
                                 day: 'numeric',
                                 month: 'long',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
                               })
-                            : 'Проверить готовность'}
+                            : 'Открыть заказ'}
                         </small>
                       </span>
                       <ArrowRight size={18} />

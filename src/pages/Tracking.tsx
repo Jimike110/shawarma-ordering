@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Check, CheckCheck, Clock3, CookingPot, Copy, RefreshCw, X } from 'lucide-react';
 import { api } from '../api';
+import { saveOrder } from '../orderHistory';
 import { usePolling } from '../usePolling';
 import { Loading, Notice } from '../ui';
 import { ShopInfo } from '../ui';
@@ -14,7 +15,11 @@ export function Tracking() {
   const location = useLocation();
   const token = location.hash.slice(1);
   const load = useCallback(
-    (signal: AbortSignal) => api<Order>('/orders/' + encodeURIComponent(token), { signal }),
+    async (signal: AbortSignal) => {
+      const order = await api<Order>('/orders/' + encodeURIComponent(token), { signal });
+      if (!signal.aborted) saveOrder({ token, number: order.number, created_at: order.created_at });
+      return order;
+    },
     [token],
   );
   const {
@@ -68,7 +73,9 @@ export function Tracking() {
           {closed ? 'ВАШ ЗАКАЗ' : ready ? 'ГОТОВО К ВЫДАЧЕ' : 'ГОТОВИМ ДЛЯ ВАС'}
         </div>
         <span className="tracking-icon">
-          {cancelled ? <X size={37}/> : ready || order.status === 'completed' ? (
+          {cancelled ? (
+            <X size={37} />
+          ) : ready || order.status === 'completed' ? (
             <CheckCheck size={37} />
           ) : (
             <CookingPot size={37} />
@@ -144,7 +151,11 @@ export function Tracking() {
         <div className="refresh-row">
           <span className={'status-dot ' + (error ? 'offline' : '')} />
           <small>
-            {error ? 'Повторяем подключение каждые 5 секунд' : closed ? 'Заказ закрыт' : 'Обновляем каждые 5 секунд'}
+            {error
+              ? 'Повторяем подключение каждые 5 секунд'
+              : closed
+                ? 'Заказ закрыт'
+                : 'Обновляем каждые 5 секунд'}
             {lastUpdated ? ' · ' + clock(lastUpdated.toISOString()) + ' МСК' : ''}
           </small>
           <button className="icon-button" onClick={refresh} aria-label="Обновить статус">

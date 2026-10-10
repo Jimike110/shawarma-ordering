@@ -19,7 +19,10 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
   await page.getByRole('button', { name: /Заказать ·/ }).click();
   await expect(page).toHaveURL(/\/track#/);
   const trackURL = page.url();
-  const number = (await page.locator('.order-number').innerText()).replace('ЗАКАЗ №', '');
+  const number = (await page.getByRole('heading', { name: /^ЗАКАЗ №/ }).innerText()).replace(
+    'ЗАКАЗ №',
+    '',
+  );
   expect(trackURL.split('#')[1]).toHaveLength(43);
   const kitchenContext = await browser.newContext({
     baseURL: new URL(page.url()).origin,
