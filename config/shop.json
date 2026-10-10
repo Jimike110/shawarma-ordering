@@ -1,0 +1,16 @@
+{
+  "shop_name": "Я люблю шаверму",
+  "address": "Белорусская ул., 4",
+  "city": "Санкт-Петербург",
+  "map_url": "https://yandex.ru/maps/org/ya_lyublyu_shavermu/223602659821/",
+  "schedule_enabled": true,
+  "opening_hours": [
+    { "day": 0, "open": "09:00", "close": "22:00" },
+    { "day": 1, "open": "09:00", "close": "22:00" },
+    { "day": 2, "open": "09:00", "close": "22:00" },
+    { "day": 3, "open": "09:00", "close": "22:00" },
+    { "day": 4, "open": "09:00", "close": "22:00" },
+    { "day": 5, "open": "09:00", "close": "22:00" },
+    { "day": 6, "open": "09:00", "close": "22:00" }
+  ]
+}

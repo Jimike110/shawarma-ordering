@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+!frontend.env.example
+bin/
+netlify/functions/
+playwright-report/
+test-results/
+*.log
+backups/
+artifacts/

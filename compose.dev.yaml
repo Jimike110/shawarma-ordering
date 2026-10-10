@@ -1,0 +1,4 @@
+# For host Vite + Go development only. The default Compose API stays private.
+services:
+  db:
+    ports: ['127.0.0.1:5432:5432']

@@ -1,0 +1,72 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: shawarma
+      POSTGRES_DB: shawarma
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run node scripts/setup-env.mjs first}
+    volumes: ['postgres_data:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U shawarma -d shawarma']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  api:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    environment:
+      DATABASE_URL: postgres://shawarma:${POSTGRES_PASSWORD}@db:5432/shawarma?sslmode=disable
+      KITCHEN_PASSWORD: ${KITCHEN_PASSWORD:-}
+      SESSION_SECRET: ${SESSION_SECRET:?Set a session secret}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:5173}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      AUTO_MIGRATE: 'true'
+      TRUST_PROXY: 'true'
+      STAFF_USERS: ${STAFF_USERS:-}
+      ORDER_RETENTION_DAYS: ${ORDER_RETENTION_DAYS:-0}
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:8080/api/health']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+  web:
+    build: { context: ., dockerfile: Dockerfile.web }
+    ports: ['127.0.0.1:5173:80']
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1/ && wget -q --spider http://127.0.0.1/api/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+  backups:
+    image: postgres:17-alpine
+    profiles: [operations]
+    environment:
+      PGHOST: db
+      PGUSER: shawarma
+      PGDATABASE: shawarma
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint: ['sh', '/usr/local/bin/backup.sh']
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'test -n "$$(find /backups -maxdepth 1 -name last-success -mmin -1500 -print)"',
+        ]
+      interval: 60s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    restart: unless-stopped
+volumes:
+  postgres_data:

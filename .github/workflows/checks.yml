@@ -1,0 +1,76 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm }
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          { POSTGRES_USER: shawarma, POSTGRES_PASSWORD: test-password, POSTGRES_DB: shawarma_test }
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U shawarma -d shawarma_test" --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://shawarma:test-password@localhost:5432/shawarma_test?sslmode=disable
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.25.5', cache-dependency-path: backend/go.sum }
+      - run: go test -race -v ./...
+      - run: go vet ./...
+      - run: go build -trimpath -o ../bin/server ./cmd/server
+      - run: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o ../bin/netlify-api ./cmd/netlify
+  browser:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          { POSTGRES_USER: shawarma, POSTGRES_PASSWORD: test-password, POSTGRES_DB: shawarma_test }
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U shawarma -d shawarma_test" --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://shawarma:test-password@localhost:5432/shawarma_test?sslmode=disable
+      KITCHEN_PASSWORD: ci-only-kitchen-password
+      SESSION_SECRET: ci-only-session-secret-with-at-least-32-characters
+      PUBLIC_ORIGIN: http://localhost:5173
+      COOKIE_SECURE: 'false'
+      AUTO_MIGRATE: 'true'
+      E2E_KITCHEN_PASSWORD: ci-only-kitchen-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm }
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.25.5', cache-dependency-path: backend/go.sum }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          mkdir -p bin
+          cd backend
+          go build -o ../bin/server ./cmd/server
+          cd ..
+          ./bin/server > /tmp/shawarma-api.log 2>&1 &
+          npm run dev > /tmp/shawarma-web.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:5173/api/health; then break; fi
+            sleep 1
+          done
+          npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: browser-report, path: playwright-report, retention-days: 7 }

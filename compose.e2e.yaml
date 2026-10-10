@@ -1,0 +1,47 @@
+# Isolated, disposable browser environment. Never connects to the shop database.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: shawarma
+      POSTGRES_DB: shawarma_test
+      POSTGRES_PASSWORD: e2e-only-password
+    tmpfs: ['/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U shawarma -d shawarma_test']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  api:
+    image: shawarma-ordering-api
+    build: { context: ., dockerfile: backend/Dockerfile }
+    environment:
+      DATABASE_URL: postgres://shawarma:e2e-only-password@db:5432/shawarma_test?sslmode=disable
+      KITCHEN_PASSWORD: e2e-only-kitchen-password
+      SESSION_SECRET: e2e-only-secret-at-least-32-characters-long
+      PUBLIC_ORIGIN: http://web
+      COOKIE_SECURE: 'false'
+      AUTO_MIGRATE: 'true'
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:8080/api/health']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  web:
+    image: shawarma-ordering-web
+    build: { context: ., dockerfile: Dockerfile.web }
+    depends_on:
+      api: { condition: service_healthy }
+  browser:
+    build: { context: ., dockerfile: Dockerfile.browser }
+    profiles: [tools]
+    environment:
+      E2E_BASE_URL: http://web
+      E2E_KITCHEN_PASSWORD: e2e-only-kitchen-password
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./artifacts/playwright-report:/app/playwright-report
+      - ./artifacts/test-results:/app/test-results
+    depends_on: [web]

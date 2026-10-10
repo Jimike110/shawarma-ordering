@@ -1,0 +1,28 @@
+[build]
+  command = "npm run build:netlify"
+  publish = "dist"
+[build.environment]
+  NODE_VERSION = "22"
+  GO_VERSION = "1.25.5"
+[functions]
+  directory = "netlify/functions"
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api?route=:splat"
+  status = 200
+  force = true
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Referrer-Policy = "no-referrer"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Content-Security-Policy = "default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store"

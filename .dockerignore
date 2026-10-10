@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.env
+.env.*
+bin
+netlify/functions
+playwright-report
+test-results
+artifacts
+backups

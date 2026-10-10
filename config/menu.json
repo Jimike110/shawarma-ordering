@@ -1,0 +1,218 @@
+{
+  "source_url": "https://yandex.ru/maps/org/ya_lyublyu_shavermu/223602659821/menu/",
+  "source_organization_id": "223602659821",
+  "source_title": "Я@Ша",
+  "source_address": "Белорусская ул., 4, Санкт-Петербург",
+  "checked_on": "2026-10-10",
+  "products": [
+    {
+      "name": "Шаверма в пите",
+      "source_name": "в Пите",
+      "price": 280,
+      "image": "/images/menu/pita.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/17791271/2a0000019cf1fbf405e3866e3b31356ac2a4/XXL",
+      "weight": "360 г",
+      "category": "Шаверма",
+      "sort_order": 1,
+      "image_sha256": "5797b595aa56ae2710a5f836c62dd46bd76cfdb73e75324d0c8b12fbadef8f6f"
+    },
+    {
+      "name": "Шаверма в лаваше",
+      "source_name": "в Лаваше",
+      "price": 330,
+      "image": "/images/menu/lavash.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/16345524/2a0000019cf1fae2fa020016ad91ebf7b777/XXL",
+      "weight": "420 г",
+      "category": "Шаверма",
+      "sort_order": 2,
+      "image_sha256": "7f1ff78a2a094650c9040f70038d4573589845290a59d5dedd584900353a40a0"
+    },
+    {
+      "name": "Веган",
+      "source_name": "Веган",
+      "price": 220,
+      "image": "/images/menu/vegan.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/17763327/2a0000019cf1f85e5ec6248500aaff429509/XXL",
+      "weight": "400 г",
+      "category": "Шаверма",
+      "sort_order": 3,
+      "image_sha256": "d3066f476b67067ef70b4c74f414b0f97e5ccc214267e96ed89a42ffa32a1896"
+    },
+    {
+      "name": "Шаверма с маринованной капустой",
+      "source_name": "с маринованной капустой",
+      "price": 330,
+      "image": "/images/menu/pickled-cabbage.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/20222640/2a0000019cf1f6c0472e40f2717f2208085a/XXL",
+      "weight": "430 г",
+      "category": "Шаверма",
+      "sort_order": 4,
+      "image_sha256": "8a7f8c74695a4b3adb312af20ad567454016ed50b80d73a3c171f452296b47a5"
+    },
+    {
+      "name": "Рыба-Фиш",
+      "source_name": "Рыба-Фиш",
+      "price": 350,
+      "image": "/images/menu/fish-shawarma.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/17763327/2a0000019cf1f5aed4b7aa2aee42f64ef9ae/XXL",
+      "weight": "400 г",
+      "category": "Шаверма",
+      "sort_order": 5,
+      "image_sha256": "c2c656cecb54f0f3846519d47a9ae744469d4ce228c734dc119e9be7cedc9053"
+    },
+    {
+      "name": "Шавер-Дог",
+      "source_name": "Шавер-Дог",
+      "price": 300,
+      "image": "/images/menu/shawer-dog.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/20222640/2a0000019cf1f47222cc1e092612618bd2ff/XXL",
+      "weight": "400 г",
+      "category": "Шаверма",
+      "sort_order": 6,
+      "image_sha256": "90fdb68b25a8a61e1a0b36dd98437f9dd51e1208a78d1b25328074580709b8e7"
+    },
+    {
+      "name": "Шаверма по-деревенски",
+      "source_name": "по-Деревенски",
+      "price": 350,
+      "image": "/images/menu/country-style.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/17763327/2a0000019cf1f3aec0417c555f92b1bd6cc0/XXL",
+      "weight": "490 г",
+      "category": "Шаверма",
+      "sort_order": 7,
+      "image_sha256": "8a56373c1424005a51f65844ffed8f0099e20cc97f396f8e6341b1fb6f77b09c"
+    },
+    {
+      "name": "Гавайская",
+      "source_name": "Гавайская",
+      "price": 350,
+      "image": "/images/menu/hawaiian.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/19861719/2a0000019cf1f14f0b6ac927e290909eafb6/XXL",
+      "weight": "515 г",
+      "category": "Шаверма",
+      "sort_order": 8,
+      "image_sha256": "2f1d9371748c0154f24de20ba5128381cb5f441cc799f3b57e4de735e14e32b0"
+    },
+    {
+      "name": "Сырная",
+      "source_name": "Сырная",
+      "price": 350,
+      "image": "/images/menu/cheese.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/17763327/2a0000019cf1eeed73366d04ebdad46aa025/XXL",
+      "weight": "440 г",
+      "category": "Шаверма",
+      "sort_order": 9,
+      "image_sha256": "f73675281512f72b04e34bdf59592cd4ff1cfdc8f89a52d388e12eddd1ab6066"
+    },
+    {
+      "name": "BBQ с беконом",
+      "source_name": "BBQ с беконом",
+      "price": 350,
+      "image": "/images/menu/bacon-bbq.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/17763327/2a0000019cf1edb5da2fab0e37e6cfa7686b/XXL",
+      "weight": "430 г",
+      "category": "Шаверма",
+      "sort_order": 10,
+      "image_sha256": "29619b9eaefb84bac8aec1de4ebc42d1ae14b76adf771969ecb6695f45da8b9a"
+    },
+    {
+      "name": "Шаверма на тарелке",
+      "source_name": "на Тарелке",
+      "price": 400,
+      "image": "/images/menu/shawarma-plate.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/2781182/2a00000199bfd0071782d31125d346c1a764/XXL",
+      "weight": "650 г",
+      "category": "Шаверма",
+      "sort_order": 11,
+      "image_sha256": "ba1415c12ac1c1674dd525cb2871aefa5d953cca6afd7baf0959c94576475044"
+    },
+    {
+      "name": "Мисо суп",
+      "source_name": "Мисо суп",
+      "price": 200,
+      "image": "/images/menu/miso-soup.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/20222640/2a0000019dde1ac1cb506e35eeedb5b97f38/XXL",
+      "weight": "350 мл",
+      "category": "Супы",
+      "sort_order": 12,
+      "image_sha256": "fad3b61133fb189881fcc8558343b0de97f2df95f8a7aeef719e3aa217c2bd14"
+    },
+    {
+      "name": "Кокосовый суп",
+      "source_name": "Кокосовый суп",
+      "price": 300,
+      "image": "/images/menu/coconut-soup.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/5632604/2a0000019dde1afd13463301b1a2fcffde75/XXL",
+      "weight": "350 мл",
+      "category": "Супы",
+      "sort_order": 13,
+      "image_sha256": "f72e0fc597d4dec12f2d8fb6628fd7d81b20cd752899dddb2c4482444640f987"
+    },
+    {
+      "name": "Картофель фри",
+      "source_name": "Фри картофель",
+      "price": 150,
+      "image": "/images/menu/fries.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/17791271/2a0000019ded6c10d3656b4996f86d7f7cbe/XXL",
+      "weight": "150 г",
+      "category": "Фастфуд",
+      "sort_order": 14,
+      "image_sha256": "770495d7471984d92465339fdadbe02fbba2d4f3ebd78e84d04d90d211bc5481"
+    },
+    {
+      "name": "Мясная тарелка",
+      "source_name": "Мясная тарелка",
+      "price": 380,
+      "image": "/images/menu/meat-plate.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/17700615/2a0000019dde3c14a9c5a30fc264221c936e/XXL",
+      "weight": "360 г",
+      "category": "Фастфуд",
+      "sort_order": 15,
+      "image_sha256": "c0f4a437bda209ff5942275a6e73c29f88bcecbc30447c5553aa4a2913ce9482"
+    },
+    {
+      "name": "Кесадилья",
+      "source_name": "Кесадилья",
+      "price": 380,
+      "image": "/images/menu/quesadilla.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/2757887/2a0000019a6388c0d4423c872d1316dd95c9/XXL",
+      "weight": "450 г",
+      "category": "Фастфуд",
+      "sort_order": 16,
+      "image_sha256": "df184acd276039af3c94a18479742b3a6702393935cc6ad4ddbdff3dc671221d"
+    },
+    {
+      "name": "Клаб-сэндвич",
+      "source_name": "клаб-сэндвич",
+      "price": 330,
+      "image": "/images/menu/club-sandwich.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/2791887/2a00000199f72aee031f883a661b1265b508/XXL",
+      "weight": "350 г",
+      "category": "Фастфуд",
+      "sort_order": 17,
+      "image_sha256": "60c7f5800704cd78b0997670778a6cc74f7a5ee4e02602d154d6cf4e5be30761"
+    },
+    {
+      "name": "Фиш-н-чипс",
+      "source_name": "Фиш-н-чипс",
+      "price": 380,
+      "image": "/images/menu/fish-and-chips.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/2791887/2a00000199ce90046ce3d975a01db2d3a2ce/XXL",
+      "weight": "400 г",
+      "category": "Фастфуд",
+      "sort_order": 18,
+      "image_sha256": "54cc284596edea77e26b766cdb8dda3b2798bd4d52ca40d41a5336ddbe05eb2e"
+    },
+    {
+      "name": "Английский завтрак",
+      "source_name": "Английский завтрак",
+      "price": 400,
+      "image": "/images/menu/english-breakfast.jpg",
+      "image_source": "https://avatars.mds.yandex.net/get-sprav-products/218134/2a00000199bfd509a17a998822369f727bfd/XXL",
+      "weight": "540 г",
+      "category": "Фастфуд",
+      "sort_order": 19,
+      "image_sha256": "d7e36765e5ceb5b7653b14ca4b351ed1b533ab7b8339ae3fbe4d4a032392ab41"
+    }
+  ]
+}

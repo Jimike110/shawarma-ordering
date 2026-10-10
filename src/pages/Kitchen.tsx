@@ -1,0 +1,1143 @@
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  Clock3,
+  LogOut,
+  Pause,
+  Play,
+  Plus,
+  RefreshCw,
+  SlidersHorizontal,
+  UtensilsCrossed,
+  LockKeyhole,
+  Check,
+  Volume2,
+  VolumeX,
+  ClipboardList,
+} from 'lucide-react';
+import { api, ApiError, errorMessage, json } from '../api';
+import { usePolling } from '../usePolling';
+import { FoodImage, Loading, Notice } from '../ui';
+import { useMenu } from '../menu';
+import { randomKey } from '../requestKey';
+import {
+  clock,
+  rub,
+  statusLabels,
+  type Order,
+  type Product,
+  type Settings,
+  type Status,
+} from '../types';
+const nextStatus: Partial<Record<Status, Status>> = {
+  new: 'preparing',
+  preparing: 'ready',
+  ready: 'completed',
+};
+const actionLabels: Partial<Record<Status, string>> = {
+  new: 'Начать готовить',
+  preparing: 'Заказ готов',
+  ready: 'Выдать заказ',
+};
+const preparationTimes = [5, 10, 15, 20, 30];
+function TimePresets({
+  value,
+  onChange,
+  disabled = false,
+  label,
+}: {
+  value: number;
+  onChange: (minutes: number) => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  return (
+    <div className="time-presets" role="group" aria-label={label}>
+      {preparationTimes.map((minutes) => (
+        <button
+          type="button"
+          key={minutes}
+          disabled={disabled}
+          aria-pressed={value === minutes}
+          onClick={() => onChange(minutes)}
+        >
+          {minutes} мин
+        </button>
+      ))}
+    </div>
+  );
+}
+function OrderCard({
+  order,
+  reload,
+  expired,
+}: {
+  order: Order;
+  reload: () => void;
+  expired: () => void;
+}) {
+  const [minutes, setMinutes] = useState(
+    Math.max(
+      1,
+      Math.min(120, Math.ceil((Date.parse(order.estimated_ready_at) - Date.now()) / 60000)),
+    ),
+  );
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState('');
+  const [cancelling, setCancelling] = useState(false),
+    [reason, setReason] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const closed = order.status === 'completed' || order.status === 'cancelled';
+  const overdue =
+    !closed && order.status !== 'ready' && Date.now() > Date.parse(order.estimated_ready_at);
+  async function update(value: object) {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    setConfirmation('');
+    try {
+      await api('/kitchen/orders/' + order.id, { method: 'PATCH', body: json(value) });
+      if ('eta_minutes' in value) setConfirmation('Время готовности обновлено');
+      reload();
+    } catch (e) {
+      setError(errorMessage(e));
+      if (e instanceof ApiError && e.status === 401) expired();
+      if (e instanceof ApiError && e.status === 409) reload();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <article className={'kitchen-order ' + (overdue ? 'overdue' : '')}>
+      <div className="kitchen-order-top">
+        <strong>№{order.number}</strong>
+        <span className={'status-badge status-' + order.status}>{statusLabels[order.status]}</span>
+        <small>{clock(order.created_at)}</small>
+      </div>
+      <h3>{order.name}</h3>
+      {overdue && <div className="overdue-label">Опаздываем · обновите время готовности</div>}
+      {order.items.map((item, i) => (
+        <div key={i} className="kitchen-item">
+          <span>
+            {item.quantity} × {item.name}
+            {!!item.options?.length && (
+              <small className="receipt-options">
+                {item.options.map((o) => o.label).join(', ')}
+              </small>
+            )}
+          </span>
+          <b>{rub(item.price * item.quantity)}</b>
+        </div>
+      ))}
+      {order.note && <p className="order-note">{order.note}</p>}
+      {order.cancellation_reason && (
+        <p className="order-note">Причина отмены: {order.cancellation_reason}</p>
+      )}
+      <div className="kitchen-order-meta">
+        <span>
+          <Clock3 size={15} /> К {clock(order.estimated_ready_at)}
+        </span>
+        <b>{rub(order.total)}</b>
+      </div>
+      {!closed && (
+        <>
+          {order.status !== 'ready' && (
+            <form
+              className="eta-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void update({ eta_minutes: minutes });
+              }}
+            >
+              <div className="eta-presets">
+                <span>Готовность через</span>
+                <TimePresets
+                  value={minutes}
+                  label={'Время готовности заказа ' + order.number}
+                  disabled={busy}
+                  onChange={(value) => {
+                    setMinutes(value);
+                    void update({ eta_minutes: value });
+                  }}
+                />
+              </div>
+              <label>
+                Своё время{' '}
+                <input
+                  aria-label={'Минут для заказа ' + order.number}
+                  type="number"
+                  value={minutes}
+                  min={1}
+                  max={120}
+                  required
+                  disabled={busy}
+                  onChange={(e) => setMinutes(Number(e.target.value))}
+                />{' '}
+                мин
+              </label>
+              <button
+                className="button secondary small"
+                aria-label={'Сохранить время заказа ' + order.number}
+                disabled={busy}
+              >
+                <Check size={16} /> Применить
+              </button>
+            </form>
+          )}
+          <button
+            className="button full"
+            disabled={busy}
+            onClick={() => void update({ status: nextStatus[order.status] })}
+          >
+            {busy ? 'Сохраняем…' : actionLabels[order.status]}
+          </button>
+          {cancelling ? (
+            <form
+              className="cancel-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (reason.trim())
+                  void update({ status: 'cancelled', cancellation_reason: reason.trim() });
+              }}
+            >
+              <label>
+                Причина отмены
+                <input
+                  value={reason}
+                  maxLength={300}
+                  required
+                  disabled={busy}
+                  placeholder="Сообщим клиенту"
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </label>
+              <div className="reason-presets" role="group" aria-label="Варианты сообщения клиенту">
+                {['Товар закончился', 'Кухня перегружена', 'По просьбе гостя'].map((value) => (
+                  <button
+                    type="button"
+                    key={value}
+                    disabled={busy}
+                    onClick={() => setReason(value)}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+              <div className="form-row">
+                <button
+                  type="button"
+                  className="button secondary small"
+                  disabled={busy}
+                  onClick={() => setCancelling(false)}
+                >
+                  Оставить заказ
+                </button>
+                <button className="button danger small" disabled={busy || !reason.trim()}>
+                  Подтвердить отмену
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button className="cancel-order" disabled={busy} onClick={() => setCancelling(true)}>
+              Отменить заказ
+            </button>
+          )}
+        </>
+      )}
+      {error && <Notice>{error}</Notice>}
+      {confirmation && (
+        <p className="inline-success" role="status">
+          {confirmation}
+        </p>
+      )}
+    </article>
+  );
+}
+function ProductEditor({
+  product,
+  done,
+  expired,
+}: {
+  product: Product;
+  done: () => void;
+  expired: () => void;
+}) {
+  const [value, setValue] = useState({
+    ...product,
+    ingredients: product.ingredients ?? '',
+    allergens: product.allergens ?? '',
+    options: product.options ?? [],
+  });
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState('');
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api(product.id ? '/kitchen/products/' + product.id : '/kitchen/products', {
+        method: product.id ? 'PUT' : 'POST',
+        body: json(value),
+      });
+      done();
+    } catch (e) {
+      setError(errorMessage(e));
+      if (e instanceof ApiError && e.status === 401) expired();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="panel product-editor" onSubmit={submit}>
+      <fieldset className="form-fields" disabled={busy}>
+        <h2>{product.id ? 'Редактировать товар' : 'Новый товар'}</h2>
+        <label>
+          Название
+          <input
+            value={value.name}
+            maxLength={100}
+            required
+            onChange={(e) => setValue({ ...value, name: e.target.value })}
+          />
+        </label>
+        <label>
+          Описание
+          <textarea
+            value={value.description}
+            maxLength={600}
+            rows={3}
+            onChange={(e) => setValue({ ...value, description: e.target.value })}
+          />
+        </label>
+        <div className="form-row">
+          <label>
+            Цена, ₽
+            <input
+              type="number"
+              min={1}
+              max={1000000}
+              required
+              value={value.price}
+              onChange={(e) => setValue({ ...value, price: Number(e.target.value) })}
+            />
+          </label>
+          <label>
+            Вес / объём
+            <input
+              maxLength={40}
+              value={value.weight}
+              onChange={(e) => setValue({ ...value, weight: e.target.value })}
+            />
+          </label>
+        </div>
+        <div className="form-row">
+          <label>
+            Категория
+            <input
+              maxLength={100}
+              required
+              value={value.category}
+              onChange={(e) => setValue({ ...value, category: e.target.value })}
+            />
+          </label>
+          <label>
+            Порядок
+            <input
+              type="number"
+              min={0}
+              max={10000}
+              value={value.sort_order}
+              onChange={(e) => setValue({ ...value, sort_order: Number(e.target.value) })}
+            />
+          </label>
+        </div>
+        <label>
+          Фото: путь /images/... или HTTPS
+          <input
+            maxLength={1000}
+            required
+            value={value.image}
+            onChange={(e) => setValue({ ...value, image: e.target.value })}
+          />
+        </label>
+        <label>
+          Состав
+          <textarea
+            rows={3}
+            maxLength={600}
+            value={value.ingredients}
+            onChange={(e) => setValue({ ...value, ingredients: e.target.value })}
+            placeholder="Укажите полный состав"
+          />
+        </label>
+        <label>
+          Аллергены
+          <textarea
+            rows={2}
+            maxLength={300}
+            value={value.allergens}
+            onChange={(e) => setValue({ ...value, allergens: e.target.value })}
+            placeholder="Только подтверждённые сведения"
+          />
+        </label>
+        <fieldset className="option-editor">
+          <legend>Опции товара</legend>
+          <p className="muted">Дополнения с ценой или бесплатные изменения. До 12 опций.</p>
+          {value.options.map((option, index) => (
+            <div className="option-editor-row" key={option.id}>
+              <label>
+                Название опции
+                <input
+                  required
+                  maxLength={80}
+                  value={option.label}
+                  onChange={(e) =>
+                    setValue({
+                      ...value,
+                      options: value.options.map((o, i) =>
+                        i === index ? { ...o, label: e.target.value } : o,
+                      ),
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Доплата, ₽
+                <input
+                  type="number"
+                  min={0}
+                  max={10000}
+                  required
+                  value={option.price}
+                  onChange={(e) =>
+                    setValue({
+                      ...value,
+                      options: value.options.map((o, i) =>
+                        i === index ? { ...o, price: Number(e.target.value) } : o,
+                      ),
+                    })
+                  }
+                />
+              </label>
+              <button
+                className="remove-line"
+                type="button"
+                aria-label={'Удалить опцию ' + (option.label || index + 1)}
+                onClick={() =>
+                  setValue({ ...value, options: value.options.filter((_, i) => i !== index) })
+                }
+              >
+                Удалить
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="button secondary small"
+            disabled={value.options.length >= 12}
+            onClick={() =>
+              setValue({
+                ...value,
+                options: [
+                  ...value.options,
+                  { id: 'opt-' + randomKey().slice(0, 12), label: '', price: 0 },
+                ],
+              })
+            }
+          >
+            Добавить опцию
+          </button>
+        </fieldset>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={value.available}
+            onChange={(e) => setValue({ ...value, available: e.target.checked })}
+          />{' '}
+          Доступен для заказа
+        </label>
+        {error && <Notice>{error}</Notice>}
+        <div className="form-row">
+          <button type="button" className="button secondary" onClick={done}>
+            Закрыть
+          </button>
+          <button className="button">{busy ? 'Сохраняем…' : 'Сохранить'}</button>
+        </div>
+      </fieldset>
+    </form>
+  );
+}
+function SettingsForm({
+  settings,
+  saved,
+  expired,
+}: {
+  settings: Settings;
+  saved: () => void;
+  expired: () => void;
+}) {
+  const [value, setValue] = useState(settings),
+    [dirty, setDirty] = useState(false);
+  const [error, setError] = useState(''),
+    [busy, setBusy] = useState(false),
+    [success, setSuccess] = useState(false);
+  useEffect(() => {
+    if (!dirty) setValue(settings);
+  }, [settings]);
+  const change = (next: Settings) => {
+    setValue(next);
+    setDirty(true);
+    setSuccess(false);
+  };
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const result = await api<Settings>('/kitchen/settings', { method: 'PUT', body: json(value) });
+      setValue(result);
+      setDirty(false);
+      setSuccess(true);
+      saved();
+    } catch (e) {
+      setError(errorMessage(e));
+      if (e instanceof ApiError && e.status === 401) expired();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="panel settings-form" onSubmit={submit}>
+      <fieldset className="form-fields" disabled={busy}>
+        <h2>Приём заказов</h2>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={value.paused}
+            onChange={(e) => change({ ...value, paused: e.target.checked })}
+          />
+          Приостановить новые заказы
+        </label>
+        <p className="muted">Существующие заказы остаются в очереди.</p>
+        <label>
+          Базовое время приготовления, мин
+          <input
+            type="number"
+            min={1}
+            max={120}
+            required
+            value={value.prep_minutes}
+            onChange={(e) => change({ ...value, prep_minutes: Number(e.target.value) })}
+          />
+        </label>
+        <TimePresets
+          value={value.prep_minutes}
+          label="Базовое время приготовления"
+          disabled={busy}
+          onChange={(minutes) => change({ ...value, prep_minutes: minutes })}
+        />
+        <p className="field-hint">Выберите время или введите своё, затем сохраните настройки.</p>
+        <label>
+          Сообщение во время паузы
+          <textarea
+            rows={3}
+            maxLength={300}
+            value={value.pause_message}
+            onChange={(e) => change({ ...value, pause_message: e.target.value })}
+          />
+        </label>
+        <h2>Информация о заведении</h2>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={value.demo_mode ?? true}
+            onChange={(e) => change({ ...value, demo_mode: e.target.checked })}
+          />
+          Демонстрационное меню и цены
+        </label>
+        <label>
+          Название
+          <input
+            maxLength={100}
+            value={value.shop_name ?? ''}
+            onChange={(e) => change({ ...value, shop_name: e.target.value })}
+          />
+        </label>
+        <label>
+          Адрес самовывоза
+          <input
+            maxLength={200}
+            value={value.address ?? ''}
+            onChange={(e) => change({ ...value, address: e.target.value })}
+          />
+        </label>
+        <label>
+          Город
+          <input
+            maxLength={100}
+            value={value.city ?? ''}
+            onChange={(e) => change({ ...value, city: e.target.value })}
+          />
+        </label>
+        <label>
+          Телефон
+          <input
+            type="tel"
+            maxLength={50}
+            value={value.phone ?? ''}
+            onChange={(e) => change({ ...value, phone: e.target.value })}
+          />
+        </label>
+        <label>
+          Ссылка на карту
+          <input
+            type="url"
+            maxLength={1000}
+            value={value.map_url ?? ''}
+            placeholder="https://…"
+            onChange={(e) => change({ ...value, map_url: e.target.value })}
+          />
+        </label>
+        <label>
+          Примечание о часах работы
+          <input
+            maxLength={250}
+            value={value.hours_note ?? ''}
+            onChange={(e) => change({ ...value, hours_note: e.target.value })}
+          />
+        </label>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={value.schedule_enabled ?? false}
+            onChange={(e) => change({ ...value, schedule_enabled: e.target.checked })}
+          />
+          Принимать заказы по расписанию
+        </label>
+        <p className="muted">
+          Время московское. Ночные смены заканчиваются на следующий день. Без расписания приём
+          управляется кнопкой паузы.
+        </p>
+        {value.schedule_enabled && (
+          <>
+            <button
+              type="button"
+              className="button secondary small schedule-copy"
+              disabled={!value.opening_hours?.some((h) => h.day === 1)}
+              onClick={() => {
+                const monday = value.opening_hours.find((h) => h.day === 1);
+                if (monday)
+                  change({
+                    ...value,
+                    opening_hours: [1, 2, 3, 4, 5, 6, 0].map((day) => ({ ...monday, day })),
+                  });
+              }}
+            >
+              Как в понедельник — на всю неделю
+            </button>
+            <div className="schedule-editor">
+              {[1, 2, 3, 4, 5, 6, 0].map((day) => {
+                const hours = value.opening_hours?.find((h) => h.day === day),
+                  label = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][day];
+                const setHours = (open: string, close: string) =>
+                  change({
+                    ...value,
+                    opening_hours: [
+                      ...(value.opening_hours ?? []).filter((h) => h.day !== day),
+                      { day, open, close },
+                    ],
+                  });
+                return (
+                  <div className="schedule-row" key={day}>
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={!!hours}
+                        onChange={(e) =>
+                          e.target.checked
+                            ? setHours('09:00', '22:00')
+                            : change({
+                                ...value,
+                                opening_hours: value.opening_hours.filter((h) => h.day !== day),
+                              })
+                        }
+                      />
+                      {label}
+                    </label>
+                    <input
+                      aria-label={'Открытие ' + label}
+                      type="time"
+                      disabled={!hours}
+                      required={!!hours}
+                      value={hours?.open ?? ''}
+                      onChange={(e) => setHours(e.target.value, hours!.close)}
+                    />
+                    <span>—</span>
+                    <input
+                      aria-label={'Закрытие ' + label}
+                      type="time"
+                      disabled={!hours}
+                      required={!!hours}
+                      value={hours?.close ?? ''}
+                      onChange={(e) => setHours(hours!.open, e.target.value)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+        {error && <Notice>{error}</Notice>}
+        {success && <Notice kind="success">Настройки сохранены.</Notice>}
+        <div className="editor-actions">
+          <span className="field-hint">
+            {dirty ? 'Есть несохранённые изменения' : 'Все изменения сохранены'}
+          </span>
+          <button className="button">{busy ? 'Сохраняем…' : 'Сохранить настройки'}</button>
+        </div>
+      </fieldset>
+    </form>
+  );
+}
+export function Kitchen() {
+  const [auth, setAuth] = useState<boolean | null>(null),
+    [password, setPassword] = useState(''),
+    [username, setUsername] = useState('');
+  const [error, setError] = useState(''),
+    [busy, setBusy] = useState(false),
+    [tab, setTab] = useState('orders'),
+    [filter, setFilter] = useState('active');
+  const [editing, setEditing] = useState<Product | null>(null),
+    [search, setSearch] = useState('');
+  const [sound, setSound] = useState(false),
+    [newCount, setNewCount] = useState(0);
+  const audio = useRef<AudioContext | null>(null),
+    seen = useRef<Set<number> | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    api('/kitchen/session', { signal: controller.signal })
+      .then(() => setAuth(true))
+      .catch((e) => {
+        if (!controller.signal.aborted) {
+          setAuth(false);
+          if (!(e instanceof ApiError && e.status === 401)) setError(errorMessage(e));
+        }
+      });
+    return () => controller.abort();
+  }, []);
+  const loadOrders = useCallback(async (signal: AbortSignal) => {
+    try {
+      return await api<Order[]>('/kitchen/orders', { signal });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) setAuth(false);
+      throw e;
+    }
+  }, []);
+  const queue = usePolling(loadOrders, 5000, auth === true),
+    menu = useMenu();
+  useEffect(() => {
+    if (!auth || !queue.data) return;
+    const ids = new Set(queue.data.map((o) => o.id!));
+    const fresh = seen.current
+      ? queue.data.filter((o) => o.status === 'new' && !seen.current!.has(o.id!)).length
+      : 0;
+    seen.current = ids;
+    if (fresh) {
+      setNewCount((count) => count + fresh);
+      if (sound && audio.current?.state === 'running') {
+        const osc = audio.current.createOscillator(),
+          gain = audio.current.createGain();
+        osc.connect(gain);
+        gain.connect(audio.current.destination);
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.12, audio.current.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audio.current.currentTime + 0.4);
+        osc.start();
+        osc.stop(audio.current.currentTime + 0.4);
+      }
+    }
+  }, [queue.data, auth, sound]);
+  useEffect(() => {
+    if (!auth) {
+      seen.current = null;
+      setNewCount(0);
+    }
+  }, [auth]);
+  useEffect(
+    () => () => {
+      void audio.current?.close();
+    },
+    [],
+  );
+  async function toggleSound() {
+    try {
+      if (!audio.current) audio.current = new AudioContext();
+      await audio.current.resume();
+      setSound(!sound);
+    } catch {
+      setError('Не удалось включить звук. Новые заказы появятся в очереди.');
+    }
+  }
+  const expired = () => setAuth(false);
+  const refresh = () => {
+    queue.refresh();
+    menu.refresh();
+  };
+  async function login(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api('/kitchen/login', { method: 'POST', body: json({ password, username }) });
+      setPassword('');
+      setAuth(true);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function logout() {
+    setBusy(true);
+    try {
+      await api('/kitchen/logout', { method: 'POST', body: '{}' });
+      setAuth(false);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function togglePause() {
+    if (!menu.data || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api('/kitchen/settings', {
+        method: 'PUT',
+        body: json({ ...menu.data.settings, paused: !menu.data.settings.paused }),
+      });
+      menu.refresh();
+    } catch (e) {
+      setError(errorMessage(e));
+      if (e instanceof ApiError && e.status === 401) expired();
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function toggleProduct(product: Product) {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      // Read current editable fields immediately before the full-object PUT.
+      const current = await api<{ products: Product[] }>('/menu');
+      const latest = current.products.find((p) => p.id === product.id);
+      if (!latest) throw new Error('Товар больше недоступен. Обновите меню.');
+      await api('/kitchen/products/' + product.id, {
+        method: 'PUT',
+        body: json({ ...latest, available: !product.available }),
+      });
+      menu.refresh();
+    } catch (e) {
+      setError(errorMessage(e));
+      if (e instanceof ApiError && e.status === 401) expired();
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (auth === null) return <Loading />;
+  if (!auth)
+    return (
+      <main className="container login">
+        <form className="panel login-card" onSubmit={login}>
+          <span className="round-icon">
+            <LockKeyhole size={26} />
+          </span>
+          <div className="eyebrow">ТОЛЬКО ДЛЯ СОТРУДНИКОВ</div>
+          <h1>Вход в кухню</h1>
+          <p>Войдите, чтобы принимать и готовить заказы.</p>
+          <label>
+            Логин <span className="optional">для персонального доступа</span>
+            <input
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              maxLength={60}
+              disabled={busy}
+              placeholder="Если выдан администратором"
+            />
+          </label>
+          <label>
+            Пароль
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={busy}
+            />
+          </label>
+          {error && <Notice>{error}</Notice>}
+          <button className="button full" disabled={busy}>
+            {busy ? 'Входим…' : 'Войти в кухню'}
+          </button>
+        </form>
+      </main>
+    );
+  const orders = queue.data ?? [],
+    active = orders.filter((o) => o.status !== 'completed' && o.status !== 'cancelled');
+  const overdue = active.filter(
+    (o) => o.status !== 'ready' && Date.now() > Date.parse(o.estimated_ready_at),
+  ).length;
+  const visible = (filter === 'active' ? active : orders.filter((o) => o.status === filter))
+    .filter((o) =>
+      (o.number + ' ' + o.name).toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru')),
+    )
+    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  return (
+    <main className="container kitchen">
+      <div className="kitchen-heading">
+        <div>
+          <div className="eyebrow">{menu.data?.settings.address || 'ПАНЕЛЬ СОТРУДНИКОВ'}</div>
+          <h1>Кухня</h1>
+        </div>
+        <button className="button secondary" disabled={busy} onClick={() => void logout()}>
+          <LogOut size={17} /> Выйти
+        </button>
+      </div>
+      <div className="kitchen-toolbar">
+        <span className={'intake-status ' + (!menu.data?.accepting_orders ? 'paused' : '')}>
+          <span className="status-dot" />
+          {!menu.data
+            ? 'Загружаем статус…'
+            : menu.data.settings.paused
+              ? 'Приём на паузе'
+              : menu.data.accepting_orders
+                ? 'Принимаем заказы'
+                : 'Закрыто по расписанию'}
+        </span>
+        <button
+          className="button secondary small"
+          disabled={!menu.data || busy}
+          onClick={() => void togglePause()}
+        >
+          {menu.data?.settings.paused ? <Play size={16} /> : <Pause size={16} />}{' '}
+          {menu.data?.settings.paused ? 'Возобновить' : 'Пауза'}
+        </button>
+        <button
+          className="button secondary small"
+          onClick={() => void toggleSound()}
+          aria-pressed={sound}
+        >
+          {sound ? <Volume2 size={16} /> : <VolumeX size={16} />}{' '}
+          {sound ? 'Звук включён' : 'Включить звук'}
+        </button>
+        <span className="queue-refresh">
+          {queue.error
+            ? 'Связь прервалась'
+            : queue.lastUpdated
+              ? 'Обновлено ' + clock(queue.lastUpdated.toISOString())
+              : 'Подключаемся…'}
+        </span>
+        <button className="icon-button" aria-label="Обновить кухню" onClick={refresh}>
+          <RefreshCw size={18} />
+        </button>
+      </div>
+      {error && <Notice>{error}</Notice>}
+      {queue.error && <Notice>Очередь не обновилась. {queue.error}</Notice>}
+      {menu.error && <Notice>Меню не обновилось. {menu.error}</Notice>}
+      {newCount > 0 && (
+        <div className="new-orders-notice" role="status">
+          <span>Новых заказов: {newCount}</span>
+          <button
+            onClick={() => {
+              setTab('orders');
+              setFilter('new');
+              setSearch('');
+              setNewCount(0);
+            }}
+          >
+            Посмотреть
+          </button>
+        </div>
+      )}
+      <nav className="kitchen-tabs" aria-label="Разделы кухни">
+        <button
+          aria-pressed={tab === 'orders'}
+          className={tab === 'orders' ? 'selected' : ''}
+          onClick={() => setTab('orders')}
+        >
+          <ClipboardList size={19} /> Заказы <span>{active.length}</span>
+        </button>
+        <button
+          aria-pressed={tab === 'menu'}
+          className={tab === 'menu' ? 'selected' : ''}
+          onClick={() => setTab('menu')}
+        >
+          <UtensilsCrossed size={19} /> Меню
+        </button>
+        <button
+          aria-pressed={tab === 'settings'}
+          className={tab === 'settings' ? 'selected' : ''}
+          onClick={() => setTab('settings')}
+        >
+          <SlidersHorizontal size={17} /> Настройки
+        </button>
+      </nav>
+      {tab === 'orders' && (
+        <>
+          <div className="queue-stats">
+            <button type="button" aria-pressed={filter === 'new'} onClick={() => setFilter('new')}>
+              <b>{orders.filter((o) => o.status === 'new').length}</b> новых
+            </button>
+            <button
+              type="button"
+              aria-pressed={filter === 'preparing'}
+              onClick={() => setFilter('preparing')}
+            >
+              <b>{orders.filter((o) => o.status === 'preparing').length}</b> готовим
+            </button>
+            <button
+              type="button"
+              aria-pressed={filter === 'ready'}
+              onClick={() => setFilter('ready')}
+            >
+              <b>{orders.filter((o) => o.status === 'ready').length}</b> ждут выдачи
+            </button>
+            <span className={overdue ? 'text-error' : ''}>
+              <b>{overdue}</b> опаздывают
+            </span>
+          </div>
+          <label className="queue-search">
+            <span className="sr-only">Найти заказ</span>
+            <input
+              type="search"
+              placeholder="Номер заказа или имя"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <div className="filters">
+            {[
+              ['active', 'В работе'],
+              ['new', 'Новые'],
+              ['preparing', 'Готовим'],
+              ['ready', 'Готовы'],
+              ['completed', 'Выданы'],
+              ['cancelled', 'Отменены'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                aria-pressed={filter === value}
+                className={filter === value ? 'selected' : ''}
+                onClick={() => setFilter(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {queue.loading && !queue.data ? (
+            <p role="status">Загружаем очередь…</p>
+          ) : visible.length === 0 ? (
+            <div className="panel empty">
+              <UtensilsCrossed size={30} />
+              <h2>{search ? 'Заказ не найден' : 'Здесь пока тихо'}</h2>
+              <p>
+                {search
+                  ? 'Попробуйте другое имя или номер.'
+                  : 'Новые заказы появятся автоматически.'}
+              </p>
+            </div>
+          ) : (
+            <div className="kitchen-grid">
+              {visible.map((order) => (
+                <OrderCard key={order.id} order={order} reload={queue.refresh} expired={expired} />
+              ))}
+            </div>
+          )}
+          <p className="fine-print">
+            Все активные заказы. Закрытые: до 300 за последние 24 часа. Звук работает, пока эта
+            страница открыта.
+          </p>
+        </>
+      )}
+      {tab === 'menu' && (
+        <>
+          {editing ? (
+            <ProductEditor
+              key={editing.id}
+              product={editing}
+              expired={expired}
+              done={() => {
+                setEditing(null);
+                menu.refresh();
+              }}
+            />
+          ) : (
+            <>
+              <div className="section-top">
+                <h2>Ваше меню</h2>
+                <button
+                  className="button small"
+                  onClick={() =>
+                    setEditing({
+                      id: 0,
+                      name: '',
+                      description: '',
+                      price: 290,
+                      image: '/images/classic.jpg',
+                      weight: '',
+                      category: 'Шаверма',
+                      available: true,
+                      sort_order: (menu.data?.products.length ?? 0) + 1,
+                      ingredients: '',
+                      allergens: '',
+                      options: [],
+                    })
+                  }
+                >
+                  <Plus size={18} /> Добавить товар
+                </button>
+              </div>
+              <div className="staff-products">
+                {menu.data?.products.map((p) => (
+                  <div className="panel staff-product" key={p.id}>
+                    <FoodImage src={p.image} alt={p.name} />
+                    <div>
+                      <h3>{p.name}</h3>
+                      <b>{rub(p.price)}</b>
+                      <button
+                        className={
+                          'availability-toggle ' + (p.available ? 'available-label' : 'text-error')
+                        }
+                        type="button"
+                        role="switch"
+                        aria-checked={p.available}
+                        aria-label={'В продаже: ' + p.name}
+                        disabled={busy}
+                        onClick={() => void toggleProduct(p)}
+                      >
+                        <span className="toggle-track">
+                          <i />
+                        </span>
+                        {p.available ? 'В продаже' : 'Недоступен'}
+                      </button>
+                    </div>
+                    <button className="button secondary small" onClick={() => setEditing(p)}>
+                      Изменить
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+      {tab === 'settings' && menu.data && (
+        <SettingsForm settings={menu.data.settings} saved={menu.refresh} expired={expired} />
+      )}
+    </main>
+  );
+}

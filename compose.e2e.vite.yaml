@@ -1,0 +1,15 @@
+# Test the Vite frontend against the disposable E2E database, never the real shop.
+services:
+  web:
+    image: shawarma-ordering-web-dev
+    build: { context: ., dockerfile: Dockerfile.dev }
+    working_dir: /app
+    volumes:
+      - .:/app
+      - frontend_dev_node_modules:/app/node_modules
+    environment:
+      API_PROXY_TARGET: http://api:8080
+      VITE_USE_POLLING: 'true'
+      VITE_HMR_CLIENT_PORT: '80'
+volumes:
+  frontend_dev_node_modules:
