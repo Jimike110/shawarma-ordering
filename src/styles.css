@@ -5,6 +5,374 @@
   font-weight: 100 900;
   font-display: swap;
 }
+
+select {
+  font: inherit;
+  font-size: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px;
+  background: var(--surface);
+  max-width: 100%;
+  color: inherit;
+}
+select:focus-visible {
+  outline: 3px solid var(--orange);
+  outline-offset: 3px;
+}
+.store-picker,
+.owner,
+.account-page {
+  padding-block: 24px 100px;
+}
+.store-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.store-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.store-card p {
+  margin: 0;
+}
+.store-card .form-actions {
+  margin-top: auto;
+}
+.store-card small,
+.staff-user small {
+  display: block;
+  color: var(--muted);
+}
+.pickup-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 0 auto;
+  min-height: 48px;
+  min-width: 0;
+  width: min(380px, 100%);
+  border-radius: 12px;
+  padding: 2px 12px;
+  background: var(--cream);
+  cursor: pointer;
+}
+.pickup-selector > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+  pointer-events: none;
+}
+.pickup-selector-field {
+  flex: 1;
+  min-width: 0;
+}
+.pickup-selector select {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  line-height: 1.5;
+  font-size: 16px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.pickup-selector:focus-within {
+  outline: 3px solid var(--orange);
+  outline-offset: 3px;
+}
+.pickup-selector select:focus-visible {
+  outline: none;
+}
+.staff-top {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 20px;
+}
+.staff-top > a:first-child {
+  margin-right: auto;
+  font-weight: 600;
+}
+.staff-top button {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 8px;
+}
+.form-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+button.text-link {
+  border: 0;
+  background: transparent;
+  padding: 10px 4px;
+}
+.owner-nav {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 24px;
+}
+.owner-nav button {
+  flex: 1;
+  min-height: 48px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 10px;
+}
+.owner-nav button.selected {
+  color: var(--dark);
+  box-shadow: inset 0 -3px var(--orange);
+  font-weight: 600;
+}
+.store-counts,
+.report-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-block: 14px;
+}
+.store-counts {
+  gap: 8px;
+}
+.store-counts dt,
+.report-metrics dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.store-counts dd,
+.report-metrics dd {
+  margin: 4px 0;
+  font-size: 24px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.report-metrics small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.staff-user-list,
+.history-list {
+  display: grid;
+  gap: 12px;
+  margin-block: 16px 24px;
+}
+.staff-user {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: start;
+  min-width: 0;
+}
+.staff-user > div {
+  min-width: 0;
+}
+.staff-user ul {
+  padding-left: 18px;
+}
+.staff-user p {
+  margin: 8px 0;
+}
+.staff-user > .form-actions {
+  max-width: 260px;
+}
+.admin-modal {
+  width: min(620px, calc(100% - 24px));
+  max-height: calc(100dvh - 32px);
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface);
+  padding: 24px;
+  overflow: auto;
+  color: var(--dark);
+}
+.admin-modal::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+.admin-modal label:not(.checkbox) {
+  display: grid;
+  gap: 6px;
+  margin-block: 12px;
+}
+.admin-modal input:not([type='checkbox']),
+.admin-modal select,
+.admin-modal textarea {
+  width: 100%;
+  min-width: 0;
+}
+.admin-modal fieldset {
+  border: 1px solid var(--line);
+  padding: 12px;
+  border-radius: 12px;
+  margin-block: 16px;
+}
+.assignment {
+  padding-block: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  margin-block: 12px;
+}
+.checkbox input {
+  width: 20px !important;
+  height: 20px !important;
+  flex-shrink: 0;
+}
+.temporary-password {
+  margin-bottom: 20px;
+}
+.temporary-password code {
+  display: block;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+  padding: 14px;
+  background: var(--cream);
+  user-select: all;
+}
+.reports {
+  display: grid;
+  gap: 18px;
+  margin-block: 24px;
+}
+.report-filters {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.report-filters label {
+  display: grid;
+  gap: 6px;
+  max-width: 100%;
+}
+.report-filters input {
+  max-width: 100%;
+  min-width: 0;
+}
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.table-scroll table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.table-scroll th,
+.table-scroll td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.table-scroll th {
+  color: var(--muted);
+  font-weight: 500;
+}
+.order-chart {
+  display: block;
+  width: 100%;
+  height: 160px;
+  color: var(--orange);
+  fill: var(--orange);
+}
+.activity-list {
+  margin-block: 16px 24px;
+}
+.activity-row {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-block: 14px;
+}
+.activity-row small {
+  display: block;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.activity-row p {
+  margin: 0;
+  max-width: 55%;
+}
+.owner > section {
+  margin-block: 24px;
+}
+.owner .section-top {
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .owner-nav {
+    position: sticky;
+    top: 0;
+    background: var(--cream);
+    z-index: 2;
+  }
+  .owner-nav button {
+    font-size: 12px;
+    padding: 8px 4px;
+  }
+  .staff-user,
+  .activity-row {
+    flex-direction: column;
+  }
+  .staff-user > .form-actions {
+    max-width: none;
+  }
+  .activity-row p {
+    max-width: none;
+  }
+  .report-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .report-metrics dd {
+    font-size: 22px;
+  }
+  .admin-modal {
+    padding: 18px;
+  }
+  .header-inner {
+    gap: 8px;
+  }
+  .header .header-link {
+    display: none;
+  }
+  .store-counts dt {
+    font-size: 11px;
+  }
+  .report-filters > label {
+    width: calc(50% - 6px);
+  }
+  .report-filters select {
+    width: 100%;
+  }
+  .kitchen-heading .eyebrow {
+    max-width: 100%;
+  }
+}
 :root {
   font-family:
     'Inter',
@@ -39,7 +407,8 @@ body {
 }
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 button {
@@ -2624,5 +2993,30 @@ input[type='checkbox'] {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+@media (max-width: 720px) {
+  .header-inner--pickup {
+    gap: 12px;
+  }
+  .header-inner--pickup .brand {
+    min-width: 0;
+    max-width: 38%;
+    flex-shrink: 0;
+  }
+  .header-inner--pickup .brand > span:last-child {
+    overflow-wrap: anywhere;
+  }
+  .pickup-selector {
+    flex: 1;
+    width: auto;
+    gap: 6px;
+    padding: 2px 8px;
+  }
+  .pickup-selector select {
+    font-size: 16px;
+  }
+  .pickup-selector > svg:first-child {
+    width: 16px;
   }
 }

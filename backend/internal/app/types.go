@@ -59,6 +59,7 @@ type Checkout struct {
 	Note       string     `json:"note"`
 	RequestKey string     `json:"request_key"`
 	Items      []CartItem `json:"items"`
+	StoreID    int64      `json:"store_id,omitempty"`
 }
 type OrderItem struct {
 	ProductID int64           `json:"product_id"`
@@ -80,6 +81,10 @@ type Order struct {
 	UpdatedAt          time.Time   `json:"updated_at"`
 	Token              string      `json:"token,omitempty"`
 	CancellationReason string      `json:"cancellation_reason,omitempty"`
+	StoreID            int64       `json:"store_id"`
+	StoreSlug          string      `json:"store_slug"`
+	Shop               *Settings   `json:"shop,omitempty"`
+	CancelledBy        string      `json:"cancelled_by,omitempty"`
 }
 type OrderUpdate struct {
 	Status             string `json:"status"`
@@ -99,6 +104,9 @@ var ErrMissing = errors.New("missing")
 func (c *Checkout) Validate() error {
 	c.Name = strings.TrimSpace(c.Name)
 	c.Note = strings.TrimSpace(c.Note)
+	if c.StoreID < 0 || utf8.RuneCountInString(c.Name) > 60 {
+		return problem(400, "Проверьте имя и точку получения.")
+	}
 	if utf8.RuneCountInString(c.Note) > 500 {
 		return problem(400, "Комментарий не должен превышать 500 символов.")
 	}
@@ -241,6 +249,9 @@ func (s Settings) Intake(now time.Time) (bool, string) {
 	return false, "Сейчас закрыто. Заказы принимаем в часы работы."
 }
 func ValidateUpdate(u OrderUpdate) error {
+	if u.Status == "cancelled" && strings.TrimSpace(u.CancellationReason) == "" {
+		return problem(400, "Укажите причину отмены.")
+	}
 	if utf8.RuneCountInString(u.CancellationReason) > 300 || (u.CancellationReason != "" && u.Status != "cancelled") {
 		return problem(400, "Причина отмены: до 300 символов, только при отмене заказа.")
 	}

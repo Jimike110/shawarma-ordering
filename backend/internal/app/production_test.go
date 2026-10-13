@@ -144,11 +144,14 @@ func TestClosedScheduleStillAllowsIdenticalRetry(t *testing.T) {
 func TestNamedStaffAuditAndRevocation(t *testing.T) {
 	store := testStore(t)
 	hash, _ := bcrypt.GenerateFromPassword([]byte("test-staff-password"), bcrypt.MinCost)
-	config := Config{Origin: "http://localhost:5173", Secret: strings.Repeat("s", 64), StaffUsers: map[string][]byte{"anna": hash}}
+	config := Config{Origin: "http://localhost:5173", Secret: strings.Repeat("s", 64)}
+	if _, e := store.SaveAccount(context.Background(), 0, UserInput{Username: "anna", DisplayName: "Anna", Owner: true, Active: true}, string(hash), false); e != nil {
+		t.Fatal(e)
+	}
 	a := New(store, config)
 	rr := call(t, a, "POST", "/api/kitchen/login", map[string]string{"username": "anna", "password": "test-staff-password"}, nil, config.Origin)
 	mustStatus(t, rr, 200)
-	cookie := rr.Result().Cookies()[0]
+	cookie := sessionCookie(t, rr)
 	settings, _ := store.Settings(context.Background())
 	settings.Paused = true
 	mustStatus(t, call(t, a, "PUT", "/api/kitchen/settings", settings, cookie, config.Origin), 200)
@@ -156,7 +159,7 @@ func TestNamedStaffAuditAndRevocation(t *testing.T) {
 	if e := store.DB.QueryRow("SELECT staff_name FROM audit_events WHERE action='settings.update' ORDER BY id DESC LIMIT 1").Scan(&name); e != nil || name != "anna" {
 		t.Fatal("staff attribution missing")
 	}
-	config.StaffUsers = map[string][]byte{}
+	store.DB.Exec("UPDATE staff_accounts SET active=false,version=version+1 WHERE username='anna'")
 	a = New(store, config)
 	mustStatus(t, call(t, a, "GET", "/api/kitchen/orders", nil, cookie, ""), 401)
 }
@@ -207,7 +210,7 @@ func TestMigrationsPreserveEditsAndAreVersioned(t *testing.T) {
 	}
 	var count int
 	store.DB.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&count)
-	if count != 2 {
+	if count != 3 {
 		t.Fatalf("wrong migration count %d", count)
 	}
 }

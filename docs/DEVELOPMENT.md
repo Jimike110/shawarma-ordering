@@ -56,7 +56,8 @@ For browser order/staff tests, use the disposable database with a Vite override:
 
 ```powershell
 docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml up -d db api web
-docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml run --build --rm browser
+'e2e-only-kitchen-password' | docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml exec -T api staff-admin -mode bootstrap -username owner -name TestOwner
+docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml run --build --rm --no-deps browser
 docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml down
 ```
 

@@ -7,13 +7,11 @@ if (existsSync(destination)) {
   process.exit(0);
 }
 const db = randomBytes(24).toString('hex');
-const kitchen = randomBytes(12).toString('hex');
 const secret = randomBytes(32).toString('hex');
 writeFileSync(
   destination,
   [
     'POSTGRES_PASSWORD=' + db,
-    'KITCHEN_PASSWORD=' + kitchen,
     'SESSION_SECRET=' + secret,
     'DATABASE_URL=postgres://shawarma:' + db + '@127.0.0.1:5432/shawarma?sslmode=disable',
     'PUBLIC_ORIGIN=http://localhost:5173',
@@ -24,5 +22,7 @@ writeFileSync(
   ].join('\n'),
   { mode: 0o600 },
 );
-console.log('Created .env with random local credentials. Kitchen password: ' + kitchen);
+console.log(
+  'Created .env with random local database and signing credentials. Bootstrap a staff owner after starting the app.',
+);
 console.log('Open http://localhost:5173/kitchen after starting the application.');

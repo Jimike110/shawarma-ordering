@@ -3,59 +3,18 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Banknote, Check, Clock3, MapPin } from 'lucide-react';
 import { api, ApiError, errorMessage, json } from '../api';
 import { cartTotal, invalidLine, unitPrice, useCart } from '../cart';
-import { useMenu } from '../menu';
+import { useMenu, useShopPath } from '../menu';
 import { CartItems, Loading, Notice, ShopInfo } from '../ui';
 import { randomKey } from '../requestKey';
+import { readAttempt, persist, type Attempt } from '../checkoutAttempt';
 import { saveOrder } from '../orderHistory';
 import { rub, type Order } from '../types';
-interface Attempt {
-  key: string;
-  payload: {
-    name: string;
-    note: string;
-    items: { product_id: number; quantity: number; expected_price: number; options?: string[] }[];
-  };
-}
-function readAttempt(): Attempt | null {
-  try {
-    const saved = JSON.parse(sessionStorage.getItem('shawarma-attempt-v2') ?? 'null');
-    return saved &&
-      typeof saved.key === 'string' &&
-      /^[a-f0-9]{48}$/.test(saved.key) &&
-      typeof saved.payload?.name === 'string' &&
-      typeof saved.payload?.note === 'string' &&
-      Array.isArray(saved.payload?.items) &&
-      saved.payload.items.length > 0 &&
-      saved.payload.items.length <= 30 &&
-      saved.payload.items.every(
-        (line: Attempt['payload']['items'][number]) =>
-          line &&
-          Number.isInteger(line.product_id) &&
-          line.product_id > 0 &&
-          Number.isInteger(line.quantity) &&
-          line.quantity > 0 &&
-          line.quantity <= 20 &&
-          Number.isInteger(line.expected_price) &&
-          line.expected_price > 0 &&
-          (line.options === undefined ||
-            (Array.isArray(line.options) && line.options.every((id) => typeof id === 'string'))),
-      )
-      ? saved
-      : null;
-  } catch {
-    return null;
-  }
-}
-function persist(attempt: Attempt | null) {
-  try {
-    if (attempt) sessionStorage.setItem('shawarma-attempt-v2', json(attempt));
-    else sessionStorage.removeItem('shawarma-attempt-v2');
-  } catch {}
-}
 export function Checkout() {
   const { data: menu, error: menuError, loading, refresh } = useMenu();
   const { lines, clear } = useCart();
-  const [pending, setPending] = useState<Attempt | null>(readAttempt);
+  const storeId = menu?.store?.id ?? 1;
+  const shopPath = useShopPath();
+  const [pending, setPending] = useState<Attempt | null>(() => readAttempt(storeId));
   const [name, setName] = useState(() => pending?.payload.name ?? '');
   const [note, setNote] = useState(() => pending?.payload.note ?? '');
   const [busy, setBusy] = useState(false),
@@ -78,7 +37,7 @@ export function Checkout() {
       <main className="container empty">
         <h1>Корзина пока пуста</h1>
         <p>Выберите что-нибудь вкусное в меню.</p>
-        <Link to="/" className="button">
+        <Link to={shopPath || '/'} className="button">
           Выбрать шаверму
         </Link>
       </main>
@@ -90,14 +49,19 @@ export function Checkout() {
     : cartTotal(lines, menu.products);
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (submitting.current || !menu || (!pending && (invalid || !accepting)))
-      return;
+    if (submitting.current || !menu || (!pending && (invalid || !accepting))) return;
     submitting.current = true;
     setBusy(true);
     setError('');
     const attempt = pending ?? {
       key: randomKey(),
+      shop: menu.settings,
+      store_slug: menu.store?.slug,
+      item_names: lines.map(
+        (line) => menu.products.find((p) => p.id === line.product_id)?.name ?? '',
+      ),
       payload: {
+        store_id: storeId,
         name: name.trim(),
         note: note.trim(),
         items: lines.map((line) => ({
@@ -109,7 +73,7 @@ export function Checkout() {
         })),
       },
     };
-    persist(attempt);
+    persist(attempt, storeId);
     setPending(attempt);
     try {
       const order = await api<Order>('/orders', {
@@ -118,7 +82,7 @@ export function Checkout() {
       });
       if (!order.token) throw new Error('Не удалось получить ссылку заказа. Повторите запрос.');
       saveOrder({ token: order.token, number: order.number, created_at: order.created_at });
-      persist(null);
+      persist(null, storeId);
       setPending(null);
       clear();
       navigate('/track#' + order.token);
@@ -126,7 +90,7 @@ export function Checkout() {
       setError(errorMessage(e));
       // A definitive rejection is safe to edit; a lost response must reuse the exact payload.
       if (e instanceof ApiError && (e.status === 400 || e.status === 409 || e.status === 415)) {
-        persist(null);
+        persist(null, storeId);
         setPending(null);
         if (e.status === 409) refresh();
       }
@@ -137,7 +101,7 @@ export function Checkout() {
   }
   return (
     <main className="container checkout">
-      <Link to="/" className="back-link">
+      <Link to={shopPath || '/'} className="back-link">
         <ArrowLeft size={17} /> Вернуться в меню
       </Link>
       <h1>Оформление заказа</h1>
@@ -156,7 +120,7 @@ export function Checkout() {
               </span>
               <Check size={20} />
             </div>
-            <ShopInfo settings={menu.settings} compact />
+            <ShopInfo settings={pending?.shop ?? menu.settings} compact />
             <div className="checkout-estimate">
               <Clock3 size={18} />
               <span>
@@ -225,7 +189,7 @@ export function Checkout() {
           <div className="summary-heading">
             <h2>Ваш заказ</h2>
             {!pending && (
-              <Link to="/" className="text-link">
+              <Link to={shopPath || '/'} className="text-link">
                 Добавить ещё
               </Link>
             )}
@@ -236,7 +200,9 @@ export function Checkout() {
                 <div className="receipt-line" key={i}>
                   <span>
                     {line.quantity} ×{' '}
-                    {menu.products.find((p) => p.id === line.product_id)?.name ?? 'Товар'}
+                    {pending.item_names?.[i] ||
+                      menu.products.find((p) => p.id === line.product_id)?.name ||
+                      'Товар'}
                     {line.options?.length ? (
                       <small className="receipt-options">
                         {line.options

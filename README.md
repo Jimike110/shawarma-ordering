@@ -15,9 +15,25 @@ For a fresh checkout, install Node.js 22.12+ and run `node scripts/setup-env.mjs
 - Customer app: http://localhost:5173
 - Kitchen: http://localhost:5173/kitchen
 - Health through the web proxy: http://localhost:5173/api/health
-- Kitchen password: your local `KITCHEN_PASSWORD`, unless named staff accounts are configured.
+- Staff login: individual database-backed accounts, created by the owner.
 
 Orders and menu edits persist in the PostgreSQL volume. `docker compose down` stops the app while retaining its database volume. The operations profile additionally runs daily backups into `backups/`.
+
+## Staff accounts and upgrades
+
+Back up an existing database **before** starting the new API. Migration `003_access.sql` maps existing products, settings and orders to the original store and revokes old shared-login sessions. Do not reset the database volume or rotate `SESSION_SECRET`; existing private order links and receipts must survive the upgrade.
+
+After starting the updated local API, create the first owner:
+
+```powershell
+.\scripts\staff-admin.ps1
+```
+
+This prompts twice for a hidden password (15–128 characters) and creates **owner / Владелец**. Open `/kitchen`; the owner enters the business dashboard. The owner creates stores and staff accounts there, with a manager/worker role per assigned store. Workers can fulfil/cancel orders, change availability and pause a shift, but cannot override an owner stop. Temporary staff passwords expire after 24 hours and must be replaced at first login. Existing passwords are never displayed.
+
+Owner recovery uses `.\scripts\staff-admin.ps1 -Mode recovery`. Legacy named bcrypt accounts can be imported explicitly with `backend/cmd/staff-admin -mode import` and a deliberately supplied `STAFF_USERS`; they become workers at the original store and must change their password. Environment kitchen passwords no longer grant runtime access.
+
+For Netlify/Neon, first export the **target direct** `DATABASE_URL` in the migration terminal, run `go run ./cmd/migrate` from `backend`, then run `.\scripts\staff-admin.ps1 -Hosted` from the project root. Publish the frontend and backend together and check hosted cookies, store isolation and checkout before publishing additional stores. Never supply production credentials to previews or test commands.
 
 ## Vite hot reload — current local mode
 
@@ -38,7 +54,8 @@ Keep both Compose files when starting/rebuilding the development setup. Running 
 - Private tracking, recent links saved on this device, live preparation estimate, delayed-order messaging, cancellation reasons, and directions/contact details when configured.
 - Mobile kitchen navigation, queue filters/counters, 5/10/15/20/30-minute preparation shortcuts, quick availability switches, cancellation suggestions, overdue markers, and new-order notices/sound.
 - Staff product editing, ingredient/allergen fields, option pricing, availability, shop details, opening hours including overnight shifts, and manual pause.
-- Shared demo login or named staff logins with transactional attribution of order/menu/settings changes.
+- Owner, manager and worker accounts with store assignments, password resets, session revocation and transactional business activity.
+- Multiple pickup points, separate store baskets and menus, owner stops, independent menu copying and per-store/combined order and preparation analytics. Completed-order value is not verified cash revenue.
 - Versioned transactional migrations, service health checks, optional daily backups, and automatic expired-session/rate-limit cleanup.
 
 Customer status and kitchen orders refresh every five seconds after each completed request. Terminal customer orders stop automatic status polling. Menu data refreshes every 15 seconds and reconnects when internet returns or the tab becomes visible. Mobile browsers may suspend background pages; sound is not a push notification.
@@ -49,7 +66,7 @@ Original shop setup: **Я люблю шаверму**, **Белорусская 
 docker compose -f compose.yaml -f compose.tools.yaml run --rm frontend-tools node scripts/configure-shop.mjs
 ```
 
-The script preserves other settings and requires the shared local kitchen login. For named accounts, use Kitchen → Settings. The running app uses **19 items with prices, portion sizes, and locally hosted photos** from the user-selected Yandex Maps menu, checked on 2026-10-10; demo mode is disabled. A fresh database starts with demo fixtures until the explicit [catalogue import](docs/MENU_SOURCE.md) is applied. Full ingredient/allergen information remains unset. Photo provenance: `public/images/CREDITS.md`.
+The script requires explicit `STORE_ID`, `STAFF_USERNAME` and `STAFF_PASSWORD`. Prefer the selected store's settings screen. The running app uses **19 items with prices, portion sizes, and locally hosted photos** from the user-selected Yandex Maps menu, checked on 2026-10-10; demo mode is disabled. A fresh database starts with demo fixtures until the explicit [catalogue import](docs/MENU_SOURCE.md) is applied. Full ingredient/allergen information remains unset. Photo provenance: `public/images/CREDITS.md`.
 
 ## Development and verification
 
@@ -98,7 +115,8 @@ Run browser tests in their own disposable database:
 
 ```powershell
 docker compose -p shawarma-review -f compose.e2e.yaml up -d --build db api web
-docker compose -p shawarma-review -f compose.e2e.yaml run --build --rm browser
+'e2e-only-kitchen-password' | docker compose -p shawarma-review -f compose.e2e.yaml exec -T api staff-admin -mode bootstrap -username owner -name TestOwner
+docker compose -p shawarma-review -f compose.e2e.yaml run --build --rm --no-deps browser
 docker compose -p shawarma-review -f compose.e2e.yaml down
 ```
 
@@ -112,6 +130,6 @@ Design principles and interaction rules are documented in [docs/DESIGN.md](docs/
 
 Read [AGENTS.md](AGENTS.md) first when handing this project to another agent. See [docs/OPERATIONS.md](docs/OPERATIONS.md) for named staff accounts, backups, restoration, health, retention, and public deployment setup. API contracts are in [docs/API.md](docs/API.md). Verification evidence is in [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md).
 
-This app handles one pickup shop. It does not include online payments, delivery, customer accounts, SMS/push, multiple shops, distinct staff permission levels, or financial reconciliation. Customers need their private link to retrieve an order. The separate `/orders` “Мои заказы” page shows all links still saved in this browser, newest first, with order numbers and Moscow dates/times. The home screen only shows a shortcut/count, so saved history never extends the catalogue. The page supports direct URLs/reloads, an empty state, and returning from tracking; old `/#orders` anchors redirect here. Token-only entries from the old format recover their number/date on the history page through the private tracking endpoint; opening a personal tracking link also saves it here. History does not sync between devices, and clearing browser storage removes it. Orders discarded by the former five-link limit can only be restored by opening their original personal links.
+This app handles multiple pickup points for one business with owner, manager and worker access. It does not include online payments, delivery, customer accounts, SMS/push or financial reconciliation. Customers need their private link to retrieve an order. The separate `/orders` “Мои заказы” page shows all links still saved in this browser, newest first, with order numbers and Moscow dates/times. The home screen only shows a shortcut/count, so saved history never extends the catalogue. The page supports direct URLs/reloads, an empty state, and returning from tracking; old `/#orders` anchors redirect here. Token-only entries from the old format recover their number/date on the history page through the private tracking endpoint; opening a personal tracking link also saves it here. History does not sync between devices, and clearing browser storage removes it. Orders discarded by the former five-link limit can only be restored by opening their original personal links.
 
 The selected public deployment is a separate **GitHub repository + Netlify site (React and Go functions) + Neon project for each business**, under the user's accounts. Local development stays on Docker/Vite. The user deployed `https://shawarma-ordering.netlify.app`; supplied function logs currently show database initialization failing because the intended Neon configuration is not reaching the runtime. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the environment-variable fix, runtime/migration database URLs, preview isolation, real-menu transfer, credentials, and launch verification. The current Go adapter uses Netlify's Lambda compatibility mode, which stops accepting deployments on **July 1, 2027**; successful live operation and its long-term migration path still need verification/decision. Before launch, confirm shop information/current availability, configure individual staff access, hosted backups/maintenance, and uptime monitoring.

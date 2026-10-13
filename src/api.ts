@@ -2,6 +2,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public code?: string,
   ) {
     super(message);
   }
@@ -26,11 +27,18 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
       signal: controller.signal,
     });
     const data = await response.json().catch(() => null);
-    if (!response.ok)
+    if (!response.ok) {
+      if (
+        response.status === 401 &&
+        /^(\/(staff|owner)\/|\/auth\/(me|logout|change-password)$)/.test(path)
+      )
+        window.dispatchEvent(new Event('staff-session-expired'));
       throw new ApiError(
         data?.error ?? 'Не удалось выполнить запрос. Попробуйте ещё раз.',
         response.status,
+        data?.code,
       );
+    }
     if (data === null) throw new Error('Сервер вернул некорректный ответ.');
     return data as T;
   } finally {

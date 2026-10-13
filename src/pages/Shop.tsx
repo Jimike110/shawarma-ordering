@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Clock3, Plus, X, MapPin, ShoppingBag, Search } from 'lucide-react';
 import { cartCount, cartTotal, invalidLine, lineKey, MAX_ITEMS, unitPrice, useCart } from '../cart';
-import { useMenu } from '../menu';
+import { useMenu, useShopPath } from '../menu';
 import { CartItems, FoodImage, Loading, Notice, Quantity, ShopInfo } from '../ui';
 import { useSavedOrders } from '../useSavedOrders';
 import { rub, type Product } from '../types';
 
 export function Shop() {
+  const shopPath = useShopPath();
   const orders = useSavedOrders({ recoverMetadata: false });
   const { data: menu, error, loading, refresh } = useMenu();
   const { lines, setQuantity } = useCart();
@@ -81,7 +82,7 @@ export function Shop() {
   }
   function checkout() {
     dialog.current?.close();
-    navigate('/checkout');
+    navigate(shopPath + '/checkout');
   }
   function cartContent() {
     return count === 0 ? (

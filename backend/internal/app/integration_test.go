@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -65,6 +64,16 @@ func call(t *testing.T, a http.Handler, method, route string, body any, cookie *
 	a.ServeHTTP(rr, req)
 	return rr
 }
+func sessionCookie(t *testing.T, rr *httptest.ResponseRecorder) *http.Cookie {
+	t.Helper()
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == "staff_session" && c.MaxAge > 0 {
+			return c
+		}
+	}
+	t.Fatal("staff cookie missing")
+	return nil
+}
 func mustStatus(t *testing.T, rr *httptest.ResponseRecorder, n int) {
 	t.Helper()
 	if rr.Code != n {
@@ -73,8 +82,10 @@ func mustStatus(t *testing.T, rr *httptest.ResponseRecorder, n int) {
 }
 func TestPostgresAPIWorkflow(t *testing.T) {
 	store := testStore(t)
-	hash, _ := bcrypt.GenerateFromPassword([]byte("local-test-password"), bcrypt.MinCost)
-	config := Config{Origin: "http://localhost:5173", Secret: strings.Repeat("s", 64), PasswordHash: hash}
+	config := Config{Origin: "http://localhost:5173", Secret: strings.Repeat("s", 64)}
+	if e := store.BootstrapOwner(context.Background(), "owner", "Test owner", "local-test-password"); e != nil {
+		t.Fatal(e)
+	}
 	a := New(store, config)
 	origin := config.Origin
 	t.Run("health and menu", func(t *testing.T) {
@@ -92,19 +103,19 @@ func TestPostgresAPIWorkflow(t *testing.T) {
 		}
 	})
 	t.Run("cross site rejected", func(t *testing.T) {
-		mustStatus(t, call(t, a, "POST", "/api/kitchen/login", map[string]string{"password": "local-test-password"}, nil, "https://attacker.invalid"), 403)
+		mustStatus(t, call(t, a, "POST", "/api/kitchen/login", map[string]string{"username": "owner", "password": "local-test-password"}, nil, "https://attacker.invalid"), 403)
 	})
 	t.Run("wrong password rejected", func(t *testing.T) {
 		mustStatus(t, call(t, a, "POST", "/api/kitchen/login", map[string]string{"password": "wrong"}, nil, origin), 401)
 	})
-	login := call(t, a, "POST", "/api/kitchen/login", map[string]string{"password": "local-test-password"}, nil, origin)
+	login := call(t, a, "POST", "/api/kitchen/login", map[string]string{"username": "owner", "password": "local-test-password"}, nil, origin)
 	mustStatus(t, login, 200)
 	cookies := login.Result().Cookies()
-	if len(cookies) != 1 {
+	if len(cookies) != 2 {
 		t.Fatal("session cookie missing")
 	}
-	cookie := cookies[0]
-	if !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/api/kitchen" {
+	cookie := sessionCookie(t, login)
+	if !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/api" {
 		t.Fatal("unsafe cookie")
 	}
 	mustStatus(t, call(t, New(store, config), "GET", "/api/kitchen/session", nil, cookie, ""), 200)
@@ -220,9 +231,9 @@ func TestPostgresAPIWorkflow(t *testing.T) {
 			t.Fatal(e)
 		}
 		mustStatus(t, call(t, a, "GET", "/api/kitchen/orders", nil, cookie, ""), 401)
-		rr := call(t, a, "POST", "/api/kitchen/login", map[string]string{"password": "local-test-password"}, nil, origin)
+		rr := call(t, a, "POST", "/api/kitchen/login", map[string]string{"username": "owner", "password": "local-test-password"}, nil, origin)
 		mustStatus(t, rr, 200)
-		cookie = rr.Result().Cookies()[0]
+		cookie = sessionCookie(t, rr)
 		mustStatus(t, call(t, a, "POST", "/api/kitchen/logout", map[string]string{}, cookie, origin), 200)
 		mustStatus(t, call(t, a, "GET", "/api/kitchen/session", nil, cookie, ""), 401)
 	})
@@ -230,7 +241,7 @@ func TestPostgresAPIWorkflow(t *testing.T) {
 		for i := 0; i < 12; i++ {
 			call(t, a, "POST", "/api/kitchen/login", map[string]string{"password": "wrong"}, nil, origin)
 		}
-		mustStatus(t, call(t, a, "POST", "/api/kitchen/login", map[string]string{"password": "local-test-password"}, nil, origin), 429)
+		mustStatus(t, call(t, a, "POST", "/api/kitchen/login", map[string]string{"username": "owner", "password": "local-test-password"}, nil, origin), 429)
 	})
 }
 func TestConcurrentCheckoutIsIdempotent(t *testing.T) {

@@ -42,6 +42,32 @@ export interface Menu {
   accepting_orders: boolean;
   intake_message: string;
   estimated_minutes: number;
+  store?: Store;
+}
+export interface Store {
+  id: number;
+  slug: string;
+  published: boolean;
+  archived: boolean;
+  owner_stopped: boolean;
+  stop_reason: string;
+  settings: Settings;
+  role?: 'owner' | 'manager' | 'worker';
+  accepting_orders: boolean;
+  intake_message: string;
+  counts?: Record<string, number>;
+}
+export interface StaffAccount {
+  id: number;
+  username: string;
+  display_name: string;
+  phone: string;
+  email: string;
+  owner: boolean;
+  active: boolean;
+  password_required: boolean;
+  last_login_at: string | null;
+  memberships: { store_id: number; role: 'manager' | 'worker' }[];
 }
 export interface CartLine {
   product_id: number;
@@ -69,6 +95,10 @@ export interface Order {
   updated_at: string;
   token?: string;
   cancellation_reason?: string;
+  store_id?: number;
+  store_slug?: string;
+  shop?: Settings;
+  cancelled_by?: string;
 }
 export const statusLabels: Record<Status, string> = {
   new: 'Принят',

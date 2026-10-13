@@ -17,7 +17,6 @@ services:
     build: { context: ., dockerfile: backend/Dockerfile }
     environment:
       DATABASE_URL: postgres://shawarma:e2e-only-password@db:5432/shawarma_test?sslmode=disable
-      KITCHEN_PASSWORD: e2e-only-kitchen-password
       SESSION_SECRET: e2e-only-secret-at-least-32-characters-long
       PUBLIC_ORIGIN: http://web
       COOKIE_SECURE: 'false'
@@ -40,6 +39,7 @@ services:
     environment:
       E2E_BASE_URL: http://web
       E2E_KITCHEN_PASSWORD: e2e-only-kitchen-password
+      E2E_STAFF_USERNAME: owner
     volumes:
       - ./artifacts:/app/artifacts
       - ./artifacts/playwright-report:/app/playwright-report

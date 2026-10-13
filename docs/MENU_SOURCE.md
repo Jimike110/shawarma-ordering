@@ -14,7 +14,7 @@ Configure/start the normal app first as described in the README, then apply `con
 
 ```powershell
 docker compose --profile operations run --rm backups --once
-docker compose -f compose.yaml -f compose.tools.yaml run --rm --no-deps frontend-tools node scripts/prepare-menu-import.mjs
+docker compose -f compose.yaml -f compose.tools.yaml run --rm --no-deps -e STORE_ID=1 frontend-tools node scripts/prepare-menu-import.mjs
 docker compose --profile operations up -d --build web
 docker compose --profile operations cp artifacts/import-menu.sql db:/tmp/import-menu.sql
 docker compose --profile operations exec -T db psql -U shawarma -d shawarma -f /tmp/import-menu.sql

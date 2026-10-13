@@ -83,10 +83,10 @@ The latest local public API snapshot on 2026-10-10 has **19 products**, shop nam
 1. Keep the local app running. From the repository root in Git Bash or PowerShell, generate a snapshot:
 
    ```bash
-   docker compose -f compose.yaml -f compose.tools.yaml run --rm --no-deps frontend-tools node scripts/prepare-shop-transfer.mjs
+   docker compose -f compose.yaml -f compose.tools.yaml run --rm --no-deps -e STORE_ID=1 frontend-tools node scripts/prepare-shop-transfer.mjs
    ```
 
-   If Node 22 is installed locally, `node scripts/prepare-shop-transfer.mjs` also works. The script makes only one unauthenticated local menu request, checks all menu photo checksums, and writes `artifacts/shop-transfer.json` plus `artifacts/import-shop.sql`. It never connects to Neon or changes a database. The files are ignored by Git.
+   If Node 22 is installed locally, set `STORE_ID=1` explicitly before running `node scripts/prepare-shop-transfer.mjs`. The script makes only one unauthenticated local menu request, checks all menu photo checksums, and writes `artifacts/shop-transfer.json` plus `artifacts/import-shop.sql`. It never connects to Neon or changes a database. The files are ignored by Git.
 
 2. Review the JSON snapshot for current shop values and availability. The generator copies current product names/prices/descriptions/options rather than restoring older manifest values.
 3. In the Neon project used by this Netlify site's `DATABASE_URL`, open **SQL Editor** and choose that same branch and database. Run migrations first if the application tables are missing. Review/back up any existing hosted data before applying the transfer.
@@ -117,16 +117,15 @@ Set these environment variables with the **Functions** runtime scope before usin
 | Variable               | Value                                                                               |
 | ---------------------- | ----------------------------------------------------------------------------------- |
 | `DATABASE_URL`         | TLS-enabled Neon pooled connection URL                                              |
-| `KITCHEN_PASSWORD`     | A unique password, 12–72 UTF-8 bytes                                                |
 | `SESSION_SECRET`       | At least 32 random characters; keep it stable                                       |
 | `PUBLIC_ORIGIN`        | Exact origin, e.g. `https://YOUR_SITE.netlify.app`, with no trailing slash          |
 | `COOKIE_SECURE`        | `true`                                                                              |
 | `TRUST_PROXY`          | `false`; the adapter uses the provider's client identity, not arbitrary `X-Real-IP` |
 | `ORDER_RETENTION_DAYS` | `0` until the user chooses a retention policy                                       |
 
-If individual staff accounts are selected, configure `STAFF_USERS` as username-to-bcrypt-hash JSON rather than using shared access. The selected credentials/session secret are unique to this business. Redeploy after runtime configuration changes. Keep `AUTO_MIGRATE` disabled/unset for functions; run migrations explicitly using the direct connection.
+Staff accounts are stored in this business database; runtime `KITCHEN_PASSWORD`, `KITCHEN_PASSWORD_HASH` and `STAFF_USERS` do not grant access. Keep `AUTO_MIGRATE` disabled/unset for functions; back up and run migrations explicitly using the direct connection. Before publishing the new frontend/backend, bootstrap the first owner with `./scripts/staff-admin.ps1 -Hosted` and an explicitly exported target direct `DATABASE_URL`. The password prompt is hidden. See the [upgrade instructions](../README.md#staff-accounts-and-upgrades).
 
-Alternatively use `KITCHEN_PASSWORD_HASH` with a bcrypt hash instead of `KITCHEN_PASSWORD`. Secrets belong in Netlify environment settings, not in `netlify.toml`, the frontend, or GitHub source.
+Database/session secrets belong in Netlify environment settings, not in `netlify.toml`, the frontend, or GitHub source.
 
 `PUBLIC_ORIGIN` intentionally permits exactly one origin for staff mutations. Store production database/staff secrets in the Production deploy context with Functions scope. Disable previews initially, or give them separately scoped credentials and an isolated empty/sanitized Neon preview branch/test database plus a matching origin. Never let preview deployments write to production data or expose a production-data clone. A separate Neon project per business is still required; preview branches are for environments within that one business.
 
@@ -158,11 +157,9 @@ Netlify's [function environment documentation](https://docs.netlify.com/build/fu
 
 ### Troubleshooting: kitchen login disappears on reload
 
-The user reported this on 2026-10-10. A reproduced backend defect affected shared access configured with `KITCHEN_PASSWORD`: every `LoadConfig()` generated a new salted bcrypt hash, and sessions stored a fingerprint of that hash. Another function/server instance therefore rejected the same password's session with HTTP 401. Keeping `SESSION_SECRET` stable did not fix that defect.
+The staff API now uses database-backed sessions and `staff_session` scoped to `/api`. Migration `003_access.sql` invalidates old kitchen sessions; bootstrap an owner explicitly before publishing the upgrade. Shared environment passwords no longer work.
 
-The corrected backend uses a stable HMAC identity derived from the shared password and session secret for session revocation, while bcrypt still checks login passwords. Explicit `KITCHEN_PASSWORD_HASH` and named `STAFF_USERS` retain their existing hash-based revocation. Publish the updated backend through the normal Git/Netlify deployment, then sign in once again; previous shared-password sessions use the old credential fingerprint. No database migration or data reimport is required. Keep the configured shared password and `SESSION_SECRET` stable across instances; changing either revokes shared-password sessions. The session lifetime remains 12 hours.
-
-Local PostgreSQL regressions reproduce the old HTTP 401 and verify the fix across independently loaded configurations, protected order requests, password/secret changes, logout, and explicit-hash rotation. Live hosted behavior still needs checking after deployment. If reload still shows login, inspect the status of `GET /api/kitchen/session` and whether the `kitchen_session` cookie is sent, without sharing its value. HTTP 401 is an authentication failure; network/5xx failures indicate a separate service problem. Ensure HTTPS uses `COOKIE_SECURE=true` and remain on the same deployed hostname.
+If refresh shows login, inspect `GET /api/auth/me` and whether `staff_session` is sent, without sharing its value. HTTP 401 can mean expiry or account/password/assignment revocation; network/5xx failures are service errors. HTTPS requires `COOKIE_SECURE=true`, an exact `PUBLIC_ORIGIN` and the same deployed hostname. Verify session persistence across function cold starts after deployment.
 
 Open the menu, submit a test order, save its tracking link, sign in to the kitchen, and advance the order. Confirm that the open tracking page updates without a manual refresh. Test a paused shop and an unavailable product.
 

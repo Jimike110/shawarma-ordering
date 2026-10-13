@@ -11,7 +11,8 @@ import {
   Phone,
   Clock3,
 } from 'lucide-react';
-import { useMenu } from './menu';
+import { useMenu, useShopPath } from './menu';
+import { PickupSelector } from './PickupSelector';
 import {
   cartCount,
   invalidLine,
@@ -22,9 +23,10 @@ import {
   useCart,
 } from './cart';
 import { rub, type Product, type Settings } from './types';
-export function Layout() {
+export function Layout({ neutral = false }: { neutral?: boolean }) {
   const location = useLocation();
   const { data } = useMenu();
+  const shopPath = useShopPath();
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
@@ -43,9 +45,9 @@ export function Layout() {
         К содержимому
       </a>
       <header className="header">
-        <div className="header-inner">
+        <div className={'header-inner' + (!neutral ? ' header-inner--pickup' : '')}>
           <Link
-            to="/"
+            to={neutral ? '/' : shopPath || '/'}
             className="brand"
             aria-label={(data?.settings.shop_name || 'Шаверма на районе') + ' — меню'}
           >
@@ -62,11 +64,8 @@ export function Layout() {
               )}
             </span>
           </Link>
-          <span className="address">
-            <MapPin size={16} />
-            {data?.settings.address || 'Самовывоз'}
-          </span>
-          <Link to="/#menu" className="header-link">
+          {!neutral && <PickupSelector />}
+          <Link to={neutral ? '/' : shopPath + '#menu'} className="header-link">
             Меню <ShoppingBag size={16} />
           </Link>
         </div>
@@ -76,7 +75,9 @@ export function Layout() {
       </div>
       <footer className="footer container">
         <span>{data?.settings.shop_name || 'Шаверма на районе'} · Самовывоз</span>
-        <span>{[data?.settings.address, data?.settings.city].filter(Boolean).join(' · ')}</span>
+        {!neutral && (
+          <span>{[data?.settings.address, data?.settings.city].filter(Boolean).join(' · ')}</span>
+        )}
         <Link to="/kitchen" className="staff-link">
           Вход для сотрудников <ArrowUpRight size={14} />
         </Link>

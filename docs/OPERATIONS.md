@@ -1,6 +1,6 @@
 # Running the shop
 
-The app supports a single pickup location and payment at collection. Current local kitchen settings, checked on 2026-10-10, use **Я@Ша**, **Белорусская ул., 4, Санкт-Петербург**, and daily **11:00–22:00 Moscow time**, with 10-minute preparation and a staff-filled phone number. Рыба-Фиш is unavailable. `config/shop.json` retains the original Я люблю шаверму name and 09:00 opening; review current staff edits before applying it. The running shop uses the 19-item catalogue, prices, portion sizes, and local photos from the user-selected Yandex Maps listing; demo mode is disabled. See [menu source/import](MENU_SOURCE.md) before applying the catalogue to a fresh database and the [hosted shop transfer](DEPLOYMENT.md#transfer-the-current-menu-and-shop-settings-into-a-fresh-hosted-database) to copy current public data to Neon. Full ingredient/allergen information is still unset; staff must confirm contact accuracy, current stock, and schedule exceptions.
+The app supports multiple pickup stores within one business and payment at collection. Current local kitchen settings, checked on 2026-10-10, use **Я@Ша**, **Белорусская ул., 4, Санкт-Петербург**, and daily **11:00–22:00 Moscow time**, with 10-minute preparation and a staff-filled phone number. Рыба-Фиш is unavailable. `config/shop.json` retains the original Я люблю шаверму name and 09:00 opening; review current staff edits before applying it. The running shop uses the 19-item catalogue, prices, portion sizes, and local photos from the user-selected Yandex Maps listing; demo mode is disabled. See [menu source/import](MENU_SOURCE.md) before applying the catalogue to a fresh database and the [hosted shop transfer](DEPLOYMENT.md#transfer-the-current-menu-and-shop-settings-into-a-fresh-hosted-database) to copy current public data to Neon. Full ingredient/allergen information is still unset; staff must confirm contact accuracy, current stock, and schedule exceptions.
 
 ## Daily operation
 
@@ -15,37 +15,13 @@ The current local frontend is in Vite hot-reload mode at the usual `localhost:51
 - Set opening hours in Moscow time. Overnight shifts close on the following day. A checked schedule with no working days closes ordering. Manual pause overrides opening hours. Without a schedule, staff control intake using pause.
 - Product options have stable IDs, labels, and an extra price in whole rubles; a zero price represents a free change. Historic receipts keep the selected labels and paid prices. Removing an option prevents new orders with it but does not change existing receipts.
 
-## Named staff access
+## Staff access
 
-Kitchen sessions last 12 hours and should survive page reloads and server/function restarts. Shared `KITCHEN_PASSWORD` access uses a stable session identity independent of bcrypt's per-process salt; changing the shared password or `SESSION_SECRET` requires a new login. Deploying the cross-instance session fix once also requires a new shared-password login. Named accounts and explicit password hashes revoke sessions when their configured hash changes.
+Staff accounts live in PostgreSQL. Back up before migration `003_access.sql`; it removes legacy shared sessions while preserving original store data. After migration, run `./scripts/staff-admin.ps1` to create the first owner (hidden password prompt). See [upgrade instructions](../README.md#staff-accounts-and-upgrades), including explicit owner recovery and legacy bcrypt-account import.
 
-The existing kitchen password continues to work for local demos. For individual access, set `STAFF_USERS` to a JSON object of usernames and bcrypt hashes. All named accounts have the kitchen role; this app does not implement different permission levels. Names are attributed to product, settings, and order mutations in `audit_events`, in the same database transaction as the mutation.
+Owners create accounts and assign manager/worker access per store through the dashboard. Temporary passwords expire after 24 hours and require a personal password at first login. Passwords are never displayed after issuance. Password resets, disabling accounts and assignment changes revoke existing sessions. Staff sessions last 12 hours and persist across refreshes and function restarts; sensitive owner changes require password confirmation within five minutes.
 
-Build the password hashing helper:
-
-```powershell
-cd backend
-go build -o ../bin/hash-password.exe ./cmd/hash-password
-cd ..
-```
-
-Enter a password through a secure prompt; pass it to the helper through stdin:
-
-```powershell
-$staffPassword = Read-Host 'New staff password' -AsSecureString
-$staffCredential = [System.Net.NetworkCredential]::new('', $staffPassword)
-$staffCredential.Password | .\bin\hash-password.exe
-$staffCredential = $null
-$staffPassword = $null
-```
-
-Store the returned hash in `.env` using single quotes around the complete JSON value so its dollar signs remain literal:
-
-```dotenv
-STAFF_USERS='{"anna":"PASTE_BCRYPT_HASH_HERE","maksim":"PASTE_SECOND_HASH_HERE"}'
-```
-
-With `STAFF_USERS` configured, the shared password no longer authenticates. Staff enter their username and password. Removing a user or changing their hash invalidates their previous session when the new configuration takes effect. Restart the API after a configuration change. Hashes must be valid bcrypt hashes; passwords are 12–72 UTF-8 bytes. Never place plain passwords in this JSON.
+Workers handle orders, stock, preparation time and operational pauses. Managers also edit their store's products/settings and see reports. Only owners control accounts, publication/archival and owner stops. Operational pauses cannot override an owner stop. Existing orders remain available for fulfilment while intake is stopped.
 
 ## Backups
 

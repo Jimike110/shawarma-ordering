@@ -52,8 +52,8 @@ func TestConfigRejectsUnsafeValues(t *testing.T) {
 	}
 	t.Setenv("SESSION_SECRET", strings.Repeat("s", 64))
 	t.Setenv("KITCHEN_PASSWORD", "weak")
-	if _, e := LoadConfig(); e == nil {
-		t.Fatal("weak password accepted")
+	if _, e := LoadConfig(); e != nil {
+		t.Fatal("legacy environment password must not configure database-backed accounts")
 	}
 	t.Setenv("KITCHEN_PASSWORD", "test-only-password")
 	t.Setenv("PUBLIC_ORIGIN", "https://example.com")

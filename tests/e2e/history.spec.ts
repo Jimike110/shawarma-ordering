@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { mkdir } from 'node:fs/promises';
 
 // Synthetic private links only: these checks never create/read actual customer orders.
@@ -79,7 +79,7 @@ test('legacy order 101 recovers its number and all eight saved orders stay visib
     await page.screenshot({ path: `artifacts/orders-${width}.png`, fullPage: true });
   }
   await page.getByRole('link', { name: 'Вернуться в меню', exact: true }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/s\/belorusskaya-4$/);
   await expect(page.locator('.saved-order')).toHaveCount(0);
 });
 
@@ -144,7 +144,7 @@ test('empty history has a menu action, a direct URL, and redirects old history a
   await expect(page).toHaveTitle(/Мои заказы/);
   await expect(page.getByRole('heading', { name: 'Пока нет заказов' })).toBeVisible();
   await page.getByRole('link', { name: 'Перейти в меню', exact: true }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/s\/belorusskaya-4$/);
   await page.goto('/orders');
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Пока нет заказов' })).toBeVisible();

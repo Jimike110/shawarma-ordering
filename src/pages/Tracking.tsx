@@ -191,12 +191,12 @@ export function Tracking() {
           <span>Оплата при получении</span>
           <strong>{rub(order.total)}</strong>
         </div>
-        {menu && <ShopInfo settings={menu.settings} />}
+        {(order.shop || menu) && <ShopInfo settings={order.shop ?? menu!.settings} />}
         <div className="tracking-links">
           <Link to="/orders" className="text-link">
             Все мои заказы
           </Link>
-          <Link to="/" className="text-link">
+          <Link to={order.store_slug ? '/s/' + order.store_slug : '/'} className="text-link">
             Вернуться в меню
           </Link>
         </div>

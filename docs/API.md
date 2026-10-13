@@ -8,14 +8,17 @@ All routes use `/api`. JSON requests require `Content-Type: application/json`. R
 | GET /menu                  | Public                    | Products, settings, intake state and estimate    |
 | POST /orders               | Public, rate-limited      | Transactional checkout                           |
 | GET /orders/{token}        | Private bearer link       | Status, receipt, total, ETA, cancellation reason |
-| POST /kitchen/login        | Credentials, rate-limited | Start session                                    |
-| POST /kitchen/logout       | Staff                     | End session                                      |
-| GET /kitchen/session       | Staff                     | Check session                                    |
-| GET /kitchen/orders        | Staff                     | All active plus recent closed orders             |
-| PATCH /kitchen/orders/{id} | Staff                     | Status, ETA, cancellation                        |
-| POST /kitchen/products     | Staff                     | Add product                                      |
-| PUT /kitchen/products/{id} | Staff                     | Replace editable product fields                  |
-| PUT /kitchen/settings      | Staff                     | Replace shop and intake settings                 |
+| GET /stores | Public | Published pickup points |
+| GET /stores/{slug}/menu | Public | Store-specific catalogue |
+| POST /auth/login | Credentials, rate-limited | Individual staff login |
+| GET /auth/me | Staff | Current identity and assignments |
+| POST /auth/logout | Staff | Revoke session |
+| POST /auth/change-password | Staff | Confirm current password and replace it |
+| POST /auth/reauthenticate | Staff | Confirm password for sensitive actions |
+| /staff/stores/{storeId}/* | Assigned role or owner | Scoped kitchen, menu and reports |
+| /owner/* | Owner | Accounts, stores, copying and combined reports |
+
+Legacy `/kitchen/*` aliases remain bound to store 1 and enforce the same current permissions. Products/settings writes require manager/owner; workers use narrow `PATCH .../products/{id}/availability` and `PATCH .../operations` payloads. Every resource lookup includes its store constraint. Manager-only store suffixes include `history`, `analytics` and `activity`. Owner endpoints include `stores`, `users`, `users/{id}/reset-password`, `menu-copy`, `orders`, `analytics` and `activity`.
 
 ## Menu and products
 
@@ -38,17 +41,17 @@ Ingredient/allergen strings may be empty when unknown. The frontend explicitly s
 
 `expected_price` is the unit price including extras. The server calculates totals from the database. Different option combinations are separate lines. Limits: 20 items per variant, 50 total, 30 distinct lines, name 1–60 characters, note up to 500 characters. Duplicate variants or option IDs are rejected. A request key is 32–80 alphanumeric/hyphen characters.
 
-Freeze the submitted payload and reuse its exact request key after an ambiguous result. Identical retries return the existing order, including after intake closes or prices change. Reusing a key with different content returns 409. Preserve pending attempts after network errors and 429; a new key can produce a duplicate order. A 409 also indicates stale prices, unavailable products/options, or closed intake; refresh menu state before another order.
+Include `store_id` in checkout and freeze it with the submitted payload and retry key after an ambiguous result. Omitting it anchors legacy requests to original store 1; using a retry key at a different store returns 409. Tracking includes the original pickup-location snapshot. Freeze the submitted payload and reuse its exact request key after an ambiguous result. Identical retries return the existing order, including after intake closes or prices change. Reusing a key with different content returns 409. Preserve pending attempts after network errors and 429; a new key can produce a duplicate order. A 409 also indicates stale prices, unavailable products/options, or closed intake; refresh menu state before another order.
 
-Checkout and product edits lock the shared settings row, making pause, availability, and price checks atomic. Order items retain purchased names, unit prices, and option labels/prices after staff edits.
+Checkout and product edits lock their store row, making pause, availability, and price checks atomic. Order items retain purchased names, unit prices, and option labels/prices after staff edits.
 
 A private token is a 256-bit HMAC derived from the request key and server secret; only its SHA-256 hash is stored. Checkout returns the token. Tracking uses `/track#TOKEN`; its API request uses `/api/orders/TOKEN`. Public tracking excludes customer name/note, internal ID, and token. Sequential order numbers cannot retrieve orders. Do not log bearer URLs or expose private links in screenshots/reports. The nginx API location suppresses URL access/error logs.
 
 ## Staff authentication and orders
 
-Login body is `{ "password": "..." }` for shared access or `{ "username": "anna", "password": "..." }` when `STAFF_USERS` is configured. Named accounts use bcrypt hashes; all have kitchen access. Removing/changing credentials invalidates previous named sessions when the configuration takes effect. Mutations record the staff identity transactionally in `audit_events`.
+Login body is `{ "username": "anna", "password": "..." }`. Accounts and per-store manager/worker assignments live in PostgreSQL; owners access every store. New passwords use Argon2id. Temporary passwords expire after 24 hours and allow only password change/session/logout until replaced. Account/password/assignment changes revoke sessions. Sensitive owner writes require confirmation within five minutes; a 403 with `code: "reauthentication_required"` prompts confirmation. Mutations record actor, store and changes transactionally without secrets. Bootstrap and recovery are administrative CLI operations; see the README upgrade steps.
 
-Opaque 256-bit session tokens use hashed database storage and 12-hour expiry. Cookies are HttpOnly, SameSite=Strict, and Secure on HTTPS. Staff mutations require an Origin matching `PUBLIC_ORIGIN`. Authentication/order limits persist across processes. For the private Docker API only, `TRUST_PROXY=true` trusts `X-Real-IP`, overwritten by nginx. Do not expose that API port directly. The Netlify adapter uses the provider's client IP.
+Opaque 256-bit session tokens use hashed database storage and 12-hour expiry. The `staff_session` cookie is scoped to `/api`, HttpOnly, SameSite=Strict, and Secure on HTTPS. Staff mutations require an Origin matching `PUBLIC_ORIGIN`. Authentication/order limits persist across processes. For the private Docker API only, `TRUST_PROXY=true` trusts `X-Real-IP`, overwritten by nginx. Do not expose that API port directly. The Netlify adapter uses the provider's client IP.
 
 The kitchen list contains every active order, regardless of age, plus up to 300 orders completed/cancelled within the last 24 hours. Staff responses include internal IDs, names, and notes.
 
@@ -64,7 +67,7 @@ Cancellation body:
 { "status": "cancelled", "cancellation_reason": "Сегодня закончился сыр." }
 ```
 
-The reason is customer-visible, up to 300 characters, and only accepted with cancellation. The kitchen UI requires a reason; the API permits an empty reason for compatibility.
+The reason is customer-visible, up to 300 characters, and only accepted with cancellation. Both the UI and API require a nonempty cancellation reason.
 
 ## Shop settings
 

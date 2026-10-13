@@ -4,6 +4,9 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = new URL('../', import.meta.url);
+const storeId = Number(process.env.STORE_ID);
+if (!Number.isSafeInteger(storeId) || storeId < 1)
+  throw new Error('Set STORE_ID to the intended target store before preparing an import.');
 const manifestURL = new URL('config/menu.json', root);
 const manifest = JSON.parse(await readFile(manifestURL, 'utf8'));
 if (manifest.source_organization_id !== '223602659821' || manifest.products.length !== 19)
@@ -69,30 +72,32 @@ if (process.argv.includes('--download-photos'))
 const catalog = Buffer.from(JSON.stringify(manifest.products)).toString('base64');
 const sql = `\\set ON_ERROR_STOP on
 BEGIN;
-SELECT id FROM settings WHERE id=1 FOR UPDATE;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM stores WHERE id=${storeId} AND NOT archived) THEN RAISE EXCEPTION 'Target store unavailable'; END IF; END $$;
+SELECT id FROM stores WHERE id=${storeId} FOR UPDATE;
+SELECT id FROM settings WHERE id=${storeId} FOR UPDATE;
 CREATE TEMP TABLE imported_menu ON COMMIT DROP AS
 SELECT * FROM jsonb_to_recordset(convert_from(decode('${catalog}','base64'),'UTF8')::jsonb)
 AS p(name text, price integer, image text, weight text, category text, sort_order integer);
 DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM products p JOIN imported_menu m USING (image) GROUP BY p.image HAVING count(*) > 1)
+  IF EXISTS (SELECT 1 FROM products p JOIN imported_menu m USING (image) WHERE p.store_id=${storeId} GROUP BY p.image HAVING count(*) > 1)
   THEN RAISE EXCEPTION 'Duplicate existing menu photo: resolve product matching before importing'; END IF;
 END $$;
 -- Reapplying this snapshot updates the catalogue fields, preserving IDs, stock, and staff composition/options.
 UPDATE products p SET name=m.name, price=m.price, weight=m.weight, category=m.category, sort_order=m.sort_order
-FROM imported_menu m WHERE p.image=m.image;
-INSERT INTO products(name,description,price,image,weight,category,available,sort_order)
-SELECT m.name,'',m.price,m.image,m.weight,m.category,true,m.sort_order
-FROM imported_menu m WHERE NOT EXISTS (SELECT 1 FROM products p WHERE p.image=m.image);
+FROM imported_menu m WHERE p.image=m.image AND p.store_id=${storeId};
+INSERT INTO products(name,description,price,image,weight,category,available,sort_order,store_id)
+SELECT m.name,'',m.price,m.image,m.weight,m.category,true,m.sort_order,${storeId}
+FROM imported_menu m WHERE NOT EXISTS (SELECT 1 FROM products p WHERE p.image=m.image AND p.store_id=${storeId});
 -- Remove only untouched original demo rows. Never reuse their IDs or modify historic order snapshots.
-DELETE FROM products WHERE ingredients='' AND allergens='' AND options='[]'::jsonb
+DELETE FROM products WHERE store_id=${storeId} AND ingredients='' AND allergens='' AND options='[]'::jsonb
 AND category='Шаверма' AND available=true
 AND (id,name,description,price,image,weight,sort_order) IN (
   (1,'Классическая','Курица с гриля, свежие овощи и чесночный соус в хрустящем лаваше.',290,'/images/classic.jpg','350 г',1),
   (2,'Острая','Курица, капуста, томаты и острый соус. Для тех, кто любит погорячее.',320,'/images/spicy.jpg','350 г',2),
   (3,'Сырная','Классическая шаверма с двойной порцией сыра и нежным соусом.',350,'/images/classic.jpg','380 г',3));
-UPDATE settings SET demo_mode=false,map_url='https://yandex.ru/maps/org/ya_lyublyu_shavermu/223602659821/';
-INSERT INTO audit_events(staff_name,action,resource) VALUES ('local-menu-import','menu.import','yandex:223602659821:2026-10-10');
-SELECT count(*) AS imported_products FROM products p JOIN imported_menu m USING (image);
+UPDATE settings SET demo_mode=false,map_url='https://yandex.ru/maps/org/ya_lyublyu_shavermu/223602659821/' WHERE id=${storeId};
+INSERT INTO audit_events(staff_name,store_id,action,resource) VALUES ('local-menu-import',${storeId},'menu.import','yandex:223602659821:2026-10-10');
+SELECT count(*) AS imported_products FROM products p JOIN imported_menu m USING (image) WHERE p.store_id=${storeId};
 COMMIT;
 `;
 await mkdir(new URL('artifacts/', root), { recursive: true });

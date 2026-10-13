@@ -164,6 +164,28 @@ docker compose -p shawarma-review -f compose.e2e.yaml run --rm -v './scripts:/ap
 
 The preview script only accepts local hosts and does not sign in, edit settings, or place orders. Stop the disposable stack afterward with `docker compose -p shawarma-review -f compose.e2e.yaml down`. Keep the actual shop/backup stack running.
 
+## Owner-pitch video pass (2026-10-10)
+
+### Cinematic V2 replacement (2026-10-11)
+
+The user rejected the first SVG/Irina draft and selected cinematic realistic stills with subtle movement. The new export is `artifacts/pitch-v2/shawarma-pitch-v2-ru-portrait.mp4`, physically on E: with a workspace junction.
+
+- Four generated images and the original isolated app captures show the tram, actual menu/product/checkout, the same fictional order №102 on the kitchen and customer screens, cooking, readiness, pickup, and owner benefits. No new real-shop or hosted orders were created.
+- Eight new Russian Qwen speech clips passed duration, finite-sample, and non-silence checks. Two clips/reference came from the official demo; six were generated locally on the RTX 3060 with model/cache on E:. A local Whisper Base transcription confirmed story content; it is approximate and does not replace a human listening review. The 47.098-second spoken track retains its natural pace (`atempo=1`), with pauses filling the minute.
+- Eight scene previews, three later product/confirmation/kitchen states, and three frames extracted from the actual encoded MP4 were inspected. App controls remain legible, and the product price/order number match the fixture. Static blur is cached once to avoid expensive per-frame filtering; the story photographs pan/zoom gently.
+- FFprobe verified **60.000 seconds**, **1080×1920**, **24 fps**, **1,440 decoded video frames**, **H.264**, **48 kHz mono AAC**, and **11,008,003 bytes**. A complete FFmpeg video/audio decode returned no errors.
+- New renderer syntax, PowerShell speech-script parsing, and whitespace checks passed. All media/verification containers exited and were removed; normal shop services stayed healthy. Full application suites were not rerun, and existing launch/backend-test limitations remain. Human voice/style acceptance is pending user review.
+
+### First draft (rejected)
+
+The portrait video uses the current React production build and Go API with the public shop snapshot loaded into the disposable `shawarma-review` PostgreSQL database. No real shop or hosted database orders were created.
+
+- The capture workflow completed guest checkout, staff receipt of the same order, preparation, the 10-minute time control, readiness, and collection. Customer state changes were asserted through automatic polling without a page reload. Final captures use fictional order №102, «Шаверма в лаваше», 330 ₽.
+- The API/migration and frontend production images built successfully. This artifact pass did not rerun the full application test suites; their results and existing backend limitations above still apply.
+- All eight scene previews and a frame from the exported MP4 were visually inspected. FFprobe decoded/count-checked **1,440 video frames**, **1080×1920**, **24 fps**, **H.264**, plus **48 kHz mono AAC**, with an exact **60.000-second** container duration and a 4,041,387-byte file.
+- Narration uses the installed Russian Microsoft Irina voice. Timing was fitted to each scene; aural review remains a human handoff step before presenting the draft. The original illustrations and procedural sound bed are editable, and no private order tokens or staff credentials are included in the captures.
+- The disposable review stack was stopped after export verification. Sources, storyboard, and regeneration instructions are in `docs/PITCH_VIDEO.md`; local deliverables are ignored under `artifacts/pitch/`.
+
 ## Limits and launch work
 
 These checks establish local correctness for the tested workflows. They do not establish production load capacity, uptime, real-device Safari behavior, or public HTTPS operation. Browser checks used Chromium, not a physical phone. A broader accessibility audit and load test have not been performed.

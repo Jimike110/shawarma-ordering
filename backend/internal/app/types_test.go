@@ -16,7 +16,7 @@ func TestCheckoutValidation(t *testing.T) {
 	}{
 		{"valid", func(c *Checkout) {}, true},
 		{"unicode name", func(c *Checkout) { c.Name = "  Михаил  " }, true},
-		{"empty name", func(c *Checkout) { c.Name = " " }, false},
+		{"empty name", func(c *Checkout) { c.Name = " " }, true},
 		{"long name", func(c *Checkout) { c.Name = strings.Repeat("я", 61) }, false},
 		{"long note", func(c *Checkout) { c.Note = strings.Repeat("я", 501) }, false},
 		{"empty cart", func(c *Checkout) { c.Items = nil }, false},

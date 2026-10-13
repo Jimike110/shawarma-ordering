@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 const password = process.env.E2E_KITCHEN_PASSWORD;
 test.skip(!password, 'Set E2E_KITCHEN_PASSWORD and run the local app first.');
 test('mobile checkout, private tracking auto-refresh, and staff controls', async ({
@@ -29,9 +29,12 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
     viewport: { width: 390, height: 844 },
   });
   const kitchen = await kitchenContext.newPage();
-  await kitchen.goto('/kitchen');
+  await kitchen.goto('/staff/stores/1');
+  await kitchen
+    .getByLabel('Логин', { exact: true })
+    .fill(process.env.E2E_STAFF_USERNAME ?? 'owner');
   await kitchen.getByLabel('Пароль', { exact: true }).fill(password!);
-  await kitchen.getByRole('button', { name: 'Войти в кухню' }).click();
+  await kitchen.getByRole('button', { name: 'Войти', exact: true }).click();
   await expect(kitchen.getByRole('heading', { name: 'Кухня', exact: true })).toBeVisible();
   const card = kitchen.locator('.kitchen-order').filter({ hasText: '№' + number });
   await expect(card).toBeVisible({ timeout: 12000 });
@@ -48,6 +51,8 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
   const privateResponse = await page.request.get('/api/orders/' + number);
   expect(privateResponse.status()).toBe(404);
   await kitchen.getByRole('button', { name: 'Пауза', exact: true }).click();
+  await kitchen.getByLabel('Причина паузы').fill('Проверка интерфейса');
+  await kitchen.getByRole('button', { name: 'Приостановить', exact: true }).click();
   await page.goto('/');
   await expect(
     page.getByRole('status').filter({ hasText: 'Приём заказов временно' }),
@@ -79,10 +84,14 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
   await page.goto(trackURL);
   await expect(page.getByRole('heading', { name: 'Приятного аппетита!' })).toBeVisible();
   await kitchen.getByRole('button', { name: 'Выйти', exact: true }).click();
-  await expect(kitchen.getByRole('button', { name: 'Войти в кухню' })).toBeVisible();
+  await expect(kitchen.getByRole('button', { name: 'Войти', exact: true })).toBeVisible();
   await kitchenContext.close();
 });
-test('kitchen data cannot be read without authentication', async ({ request }) => {
-  const result = await request.get('/api/kitchen/orders');
+test('kitchen data cannot be read without authentication', async ({ browser }) => {
+  const context = await browser.newContext();
+  const result = await context.request.get(
+    (process.env.E2E_BASE_URL ?? 'http://localhost:5173') + '/api/kitchen/orders',
+  );
+  await context.close();
   expect(result.status()).toBe(401);
 });

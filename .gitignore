@@ -11,3 +11,9 @@ test-results/
 *.log
 backups/
 artifacts/
+docs/
+
+# Local pitch-video tooling (media outputs are already covered by artifacts/)
+scripts/pitch/
+/Dockerfile.pitch*
+/compose.pitch*.yaml

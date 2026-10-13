@@ -94,7 +94,7 @@ func scanProduct(row interface{ Scan(...any) error }) (Product, error) {
 	return p, e
 }
 func (s *Store) Products(ctx context.Context) ([]Product, error) {
-	rows, e := s.DB.QueryContext(ctx, "SELECT "+productCols+" FROM products ORDER BY sort_order,id")
+	rows, e := s.DB.QueryContext(ctx, "SELECT "+productCols+" FROM products WHERE store_id=$1 ORDER BY sort_order,id", shopID(ctx))
 	if e != nil {
 		return nil, e
 	}
@@ -110,7 +110,7 @@ func (s *Store) Products(ctx context.Context) ([]Product, error) {
 	return products, rows.Err()
 }
 func (s *Store) Settings(ctx context.Context) (Settings, error) {
-	return scanSettings(s.DB.QueryRowContext(ctx, "SELECT "+settingsCols+" FROM settings WHERE id=1"))
+	return scanSettings(s.DB.QueryRowContext(ctx, "SELECT "+settingsCols+" FROM settings WHERE id=$1", shopID(ctx)))
 }
 
 const settingsCols = "paused,prep_minutes,pause_message,shop_name,address,city,phone,hours_note,map_url,opening_hours,schedule_enabled,demo_mode"
@@ -134,11 +134,14 @@ func (s *Store) SaveSettings(ctx context.Context, st Settings) error {
 		return e
 	}
 	defer tx.Rollback()
-	_, e = tx.ExecContext(ctx, "UPDATE settings SET paused=$1,prep_minutes=$2,pause_message=$3,shop_name=$4,address=$5,city=$6,phone=$7,hours_note=$8,map_url=$9,opening_hours=$10,schedule_enabled=$11,demo_mode=$12 WHERE id=1", st.Paused, st.PrepMinutes, st.PauseMessage, st.ShopName, st.Address, st.City, st.Phone, st.HoursNote, st.MapURL, raw, st.ScheduleEnabled, st.DemoMode)
+	if _, e = tx.ExecContext(ctx, "SELECT id FROM stores WHERE id=$1 FOR UPDATE", shopID(ctx)); e != nil {
+		return e
+	}
+	_, e = tx.ExecContext(ctx, "UPDATE settings SET paused=$1,prep_minutes=$2,pause_message=$3,shop_name=$4,address=$5,city=$6,phone=$7,hours_note=$8,map_url=$9,opening_hours=$10,schedule_enabled=$11,demo_mode=$12 WHERE id=$13", st.Paused, st.PrepMinutes, st.PauseMessage, st.ShopName, st.Address, st.City, st.Phone, st.HoursNote, st.MapURL, raw, st.ScheduleEnabled, st.DemoMode, shopID(ctx))
 	if e != nil {
 		return e
 	}
-	if e = audit(ctx, tx, "settings.update", "shop"); e != nil {
+	if e = auditDetails(ctx, tx, "settings.update", "shop", mustJSON(st)); e != nil {
 		return e
 	}
 	return tx.Commit()
@@ -154,14 +157,14 @@ func (s *Store) SaveProduct(ctx context.Context, p Product) (Product, error) {
 	}
 	defer tx.Rollback()
 	// Product edits and checkout share this lock so price and availability changes are atomic.
-	if _, e = tx.ExecContext(ctx, "SELECT id FROM settings WHERE id=1 FOR UPDATE"); e != nil {
+	if _, e = tx.ExecContext(ctx, "SELECT id FROM stores WHERE id=$1 FOR UPDATE", shopID(ctx)); e != nil {
 		return p, e
 	}
 	if p.ID == 0 {
-		e = tx.QueryRowContext(ctx, "INSERT INTO products(name,description,price,image,weight,category,available,sort_order,ingredients,allergens,options) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id", p.Name, p.Description, p.Price, p.Image, p.Weight, p.Category, p.Available, p.SortOrder, p.Ingredients, p.Allergens, raw).Scan(&p.ID)
+		e = tx.QueryRowContext(ctx, "INSERT INTO products(name,description,price,image,weight,category,available,sort_order,ingredients,allergens,options,store_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id", p.Name, p.Description, p.Price, p.Image, p.Weight, p.Category, p.Available, p.SortOrder, p.Ingredients, p.Allergens, raw, shopID(ctx)).Scan(&p.ID)
 	} else {
 		var result sql.Result
-		result, e = tx.ExecContext(ctx, "UPDATE products SET name=$1,description=$2,price=$3,image=$4,weight=$5,category=$6,available=$7,sort_order=$8,ingredients=$10,allergens=$11,options=$12 WHERE id=$9", p.Name, p.Description, p.Price, p.Image, p.Weight, p.Category, p.Available, p.SortOrder, p.ID, p.Ingredients, p.Allergens, raw)
+		result, e = tx.ExecContext(ctx, "UPDATE products SET name=$1,description=$2,price=$3,image=$4,weight=$5,category=$6,available=$7,sort_order=$8,ingredients=$10,allergens=$11,options=$12 WHERE id=$9 AND store_id=$13", p.Name, p.Description, p.Price, p.Image, p.Weight, p.Category, p.Available, p.SortOrder, p.ID, p.Ingredients, p.Allergens, raw, shopID(ctx))
 		if e == nil {
 			n, _ := result.RowsAffected()
 			if n == 0 {
@@ -172,20 +175,23 @@ func (s *Store) SaveProduct(ctx context.Context, p Product) (Product, error) {
 	if e != nil {
 		return p, e
 	}
-	if e = audit(ctx, tx, "product.save", fmt.Sprint(p.ID)); e != nil {
+	if e = auditDetails(ctx, tx, "product.save", fmt.Sprint(p.ID), mustJSON(p)); e != nil {
 		return p, e
 	}
 	return p, tx.Commit()
 }
 
-const orderCols = "id,number,customer_name,note,status,total,items,estimated_ready_at,created_at,updated_at,cancellation_reason"
+const orderCols = "id,number,customer_name,note,status,total,items,estimated_ready_at,created_at,updated_at,cancellation_reason,store_id,store_slug,shop,cancelled_by"
 
 func scanOrder(row interface{ Scan(...any) error }) (Order, error) {
 	var o Order
-	var items []byte
-	e := row.Scan(&o.ID, &o.Number, &o.Name, &o.Note, &o.Status, &o.Total, &items, &o.EstimatedReadyAt, &o.CreatedAt, &o.UpdatedAt, &o.CancellationReason)
+	var items, shop []byte
+	e := row.Scan(&o.ID, &o.Number, &o.Name, &o.Note, &o.Status, &o.Total, &items, &o.EstimatedReadyAt, &o.CreatedAt, &o.UpdatedAt, &o.CancellationReason, &o.StoreID, &o.StoreSlug, &shop, &o.CancelledBy)
 	if e == nil {
 		e = json.Unmarshal(items, &o.Items)
+		if e == nil {
+			e = json.Unmarshal(shop, &o.Shop)
+		}
 	}
 	if errors.Is(e, sql.ErrNoRows) {
 		e = ErrMissing
@@ -198,16 +204,37 @@ func (s *Store) CreateOrder(ctx context.Context, c Checkout, token string) (Orde
 		return Order{}, e
 	}
 	defer tx.Rollback()
-	st, e := scanSettings(tx.QueryRowContext(ctx, "SELECT "+settingsCols+" FROM settings WHERE id=1 FOR UPDATE"))
+	if _, e = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,184017))", "order-request:"+c.RequestKey); e != nil {
+		return Order{}, e
+	}
+	if c.StoreID == 0 {
+		c.StoreID = 1
+	}
+	ctx = shopContext(ctx, c.StoreID)
+	var slug string
+	var published, archived, stopped bool
+	e = tx.QueryRowContext(ctx, "SELECT slug,published,archived,owner_stopped FROM stores WHERE id=$1 FOR UPDATE", c.StoreID).Scan(&slug, &published, &archived, &stopped)
+	if e == sql.ErrNoRows {
+		return Order{}, problem(409, "Точка недоступна.")
+	}
+	if e != nil {
+		return Order{}, e
+	}
+	st, e := scanSettings(tx.QueryRowContext(ctx, "SELECT "+settingsCols+" FROM settings WHERE id=$1 FOR UPDATE", c.StoreID))
 	if e != nil {
 		return Order{}, e
 	}
 	payload, _ := json.Marshal(c)
 	requestHash := Hash(string(payload))
+	legacy := c
+	legacy.StoreID = 0
+	legacyPayload, _ := json.Marshal(legacy)
+	legacyHash := Hash(string(legacyPayload))
 	var existingHash string
-	e = tx.QueryRowContext(ctx, "SELECT request_hash FROM orders WHERE request_key=$1", c.RequestKey).Scan(&existingHash)
+	var existingStore int64
+	e = tx.QueryRowContext(ctx, "SELECT request_hash,store_id FROM orders WHERE request_key=$1", c.RequestKey).Scan(&existingHash, &existingStore)
 	if e == nil {
-		if existingHash != requestHash {
+		if existingStore != c.StoreID || (existingHash != requestHash && !(c.StoreID == 1 && existingHash == legacyHash)) {
 			return Order{}, problem(409, "Этот ключ уже использован для другого заказа.")
 		}
 		o, e := scanOrder(tx.QueryRowContext(ctx, "SELECT "+orderCols+" FROM orders WHERE request_key=$1", c.RequestKey))
@@ -220,13 +247,16 @@ func (s *Store) CreateOrder(ctx context.Context, c Checkout, token string) (Orde
 	if !errors.Is(e, sql.ErrNoRows) {
 		return Order{}, e
 	}
+	if !published || archived || stopped {
+		return Order{}, problem(409, "Точка сейчас не принимает заказы.")
+	}
 	if open, message := st.Intake(time.Now()); !open {
 		return Order{}, problem(409, message)
 	}
 	items := []OrderItem{}
 	total := 0
 	for _, line := range c.Items {
-		p, e := scanProduct(tx.QueryRowContext(ctx, "SELECT "+productCols+" FROM products WHERE id=$1", line.ProductID))
+		p, e := scanProduct(tx.QueryRowContext(ctx, "SELECT "+productCols+" FROM products WHERE id=$1 AND store_id=$2", line.ProductID, c.StoreID))
 		if errors.Is(e, sql.ErrNoRows) {
 			return Order{}, problem(409, "Товар больше не доступен. Обновите меню.")
 		}
@@ -259,7 +289,7 @@ func (s *Store) CreateOrder(ctx context.Context, c Checkout, token string) (Orde
 		items = append(items, OrderItem{ProductID: p.ID, Name: p.Name, Price: unitPrice, Quantity: line.Quantity, Options: options})
 	}
 	var queued int
-	if e = tx.QueryRowContext(ctx, "SELECT count(*) FROM orders WHERE status IN ('new','preparing')").Scan(&queued); e != nil {
+	if e = tx.QueryRowContext(ctx, "SELECT count(*) FROM orders WHERE store_id=$1 AND status IN ('new','preparing')", shopID(ctx)).Scan(&queued); e != nil {
 		return Order{}, e
 	}
 	minutes := st.PrepMinutes + queued*3
@@ -268,11 +298,14 @@ func (s *Store) CreateOrder(ctx context.Context, c Checkout, token string) (Orde
 	}
 	eta := time.Now().UTC().Add(time.Duration(minutes) * time.Minute)
 	raw, _ := json.Marshal(items)
-	o, e := scanOrder(tx.QueryRowContext(ctx, "INSERT INTO orders(token_hash,request_key,request_hash,customer_name,note,total,items,estimated_ready_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING "+orderCols, Hash(token), c.RequestKey, requestHash, c.Name, c.Note, total, raw, eta))
+	o, e := scanOrder(tx.QueryRowContext(ctx, "INSERT INTO orders(token_hash,request_key,request_hash,customer_name,note,total,items,estimated_ready_at,store_id,store_slug,shop,initial_ready_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$8) RETURNING "+orderCols, Hash(token), c.RequestKey, requestHash, c.Name, c.Note, total, raw, eta, c.StoreID, slug, mustJSON(st)))
 	if e != nil {
 		return o, e
 	}
 	o.Token = token
+	if _, e = tx.ExecContext(ctx, "INSERT INTO order_events(order_id,store_id,status) VALUES($1,$2,'new')", o.ID, c.StoreID); e != nil {
+		return Order{}, e
+	}
 	return o, tx.Commit()
 }
 func (s *Store) Track(ctx context.Context, token string) (Order, error) {
@@ -283,7 +316,7 @@ func (s *Store) Track(ctx context.Context, token string) (Order, error) {
 	return o, e
 }
 func (s *Store) Orders(ctx context.Context) ([]Order, error) {
-	rows, e := s.DB.QueryContext(ctx, "SELECT "+orderCols+" FROM orders WHERE status IN ('new','preparing','ready') OR id IN (SELECT id FROM orders WHERE status IN ('completed','cancelled') AND updated_at>now()-interval '24 hours' ORDER BY updated_at DESC LIMIT 300) ORDER BY created_at DESC")
+	rows, e := s.DB.QueryContext(ctx, "SELECT "+orderCols+" FROM orders WHERE store_id=$1 AND (status IN ('new','preparing','ready') OR id IN (SELECT id FROM orders WHERE store_id=$1 AND status IN ('completed','cancelled') AND updated_at>now()-interval '24 hours' ORDER BY updated_at DESC LIMIT 300)) ORDER BY created_at DESC", shopID(ctx))
 	if e != nil {
 		return nil, e
 	}
@@ -304,10 +337,11 @@ func (s *Store) UpdateOrder(ctx context.Context, id int64, u OrderUpdate) (Order
 		return Order{}, e
 	}
 	defer tx.Rollback()
-	o, e := scanOrder(tx.QueryRowContext(ctx, "SELECT "+orderCols+" FROM orders WHERE id=$1 FOR UPDATE", id))
+	o, e := scanOrder(tx.QueryRowContext(ctx, "SELECT "+orderCols+" FROM orders WHERE id=$1 AND store_id=$2 FOR UPDATE", id, shopID(ctx)))
 	if e != nil {
 		return o, e
 	}
+	previousStatus := o.Status
 	if u.Status != "" {
 		if !ValidTransition(o.Status, u.Status) {
 			return o, problem(409, "Статус заказа уже изменился. Обновите очередь.")
@@ -315,6 +349,9 @@ func (s *Store) UpdateOrder(ctx context.Context, id int64, u OrderUpdate) (Order
 		o.Status = u.Status
 		if u.Status == "cancelled" {
 			o.CancellationReason = strings.TrimSpace(u.CancellationReason)
+			if previousStatus != o.Status {
+				o.CancelledBy = actor(ctx).Username
+			}
 		}
 	}
 	if u.ETAMinutes != nil {
@@ -323,11 +360,20 @@ func (s *Store) UpdateOrder(ctx context.Context, id int64, u OrderUpdate) (Order
 		}
 		o.EstimatedReadyAt = time.Now().UTC().Add(time.Duration(*u.ETAMinutes) * time.Minute)
 	}
-	o, e = scanOrder(tx.QueryRowContext(ctx, "UPDATE orders SET status=$1,estimated_ready_at=$2,updated_at=now(),cancellation_reason=$4 WHERE id=$3 RETURNING "+orderCols, o.Status, o.EstimatedReadyAt, id, o.CancellationReason))
+	o, e = scanOrder(tx.QueryRowContext(ctx, "UPDATE orders SET status=$1,estimated_ready_at=$2,updated_at=now(),cancellation_reason=$4,cancelled_by=$6 WHERE id=$3 AND store_id=$5 RETURNING "+orderCols, o.Status, o.EstimatedReadyAt, id, o.CancellationReason, shopID(ctx), o.CancelledBy))
 	if e != nil {
 		return o, e
 	}
-	if e = audit(ctx, tx, "order.update", fmt.Sprint(id)); e != nil {
+	if previousStatus != o.Status {
+		var aid any
+		if actor(ctx).ID > 0 {
+			aid = actor(ctx).ID
+		}
+		if _, e = tx.ExecContext(ctx, "INSERT INTO order_events(order_id,store_id,actor_id,status) VALUES($1,$2,$3,$4)", id, shopID(ctx), aid, o.Status); e != nil {
+			return o, e
+		}
+	}
+	if e = auditDetails(ctx, tx, "order.update", fmt.Sprint(id), mustJSON(u)); e != nil {
 		return o, e
 	}
 	return o, tx.Commit()
@@ -335,17 +381,13 @@ func (s *Store) UpdateOrder(ctx context.Context, id int64, u OrderUpdate) (Order
 
 type staffContextKey struct{}
 
+func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 func audit(ctx context.Context, tx *sql.Tx, action, resource string) error {
-	name, _ := ctx.Value(staffContextKey{}).(string)
-	if name == "" {
-		name = "system"
-	}
-	_, e := tx.ExecContext(ctx, "INSERT INTO audit_events(staff_name,action,resource) VALUES($1,$2,$3)", name, action, resource)
-	return e
+	return auditDetails(ctx, tx, action, resource, []byte("{}"))
 }
 func (s *Store) EstimatedMinutes(ctx context.Context, base int) (int, error) {
 	var queued int
-	e := s.DB.QueryRowContext(ctx, "SELECT count(*) FROM orders WHERE status IN ('new','preparing')").Scan(&queued)
+	e := s.DB.QueryRowContext(ctx, "SELECT count(*) FROM orders WHERE store_id=$1 AND status IN ('new','preparing')", shopID(ctx)).Scan(&queued)
 	return min(120, base+queued*3), e
 }
 func (s *Store) Allow(ctx context.Context, key string, max int) (bool, error) {
@@ -354,28 +396,4 @@ func (s *Store) Allow(ctx context.Context, key string, max int) (bool, error) {
  attempts=CASE WHEN rate_limits.window_start<now()-interval '10 minutes' THEN 1 ELSE rate_limits.attempts+1 END,
  window_start=CASE WHEN rate_limits.window_start<now()-interval '10 minutes' THEN now() ELSE rate_limits.window_start END RETURNING attempts`, key).Scan(&n)
 	return n <= max, e
-}
-func (s *Store) CreateSession(ctx context.Context, token string) error {
-	return s.CreateNamedSession(ctx, token, "kitchen", "")
-}
-func (s *Store) CreateNamedSession(ctx context.Context, token, name, credential string) error {
-	_, e := s.DB.ExecContext(ctx, "INSERT INTO sessions(token_hash,expires_at,staff_name,credential_hash) VALUES($1,now()+interval '12 hours',$2,$3)", Hash(token), name, credential)
-	return e
-}
-func (s *Store) SessionIdentity(ctx context.Context, token string) (string, string, bool, error) {
-	var name, credential string
-	e := s.DB.QueryRowContext(ctx, "SELECT staff_name,credential_hash FROM sessions WHERE token_hash=$1 AND expires_at>now()", Hash(token)).Scan(&name, &credential)
-	if errors.Is(e, sql.ErrNoRows) {
-		return "", "", false, nil
-	}
-	return name, credential, e == nil, e
-}
-func (s *Store) SessionValid(ctx context.Context, token string) (bool, error) {
-	var ok bool
-	e := s.DB.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sessions WHERE token_hash=$1 AND expires_at>now())", Hash(token)).Scan(&ok)
-	return ok, e
-}
-func (s *Store) Logout(ctx context.Context, token string) error {
-	_, e := s.DB.ExecContext(ctx, "DELETE FROM sessions WHERE token_hash=$1", Hash(token))
-	return e
 }

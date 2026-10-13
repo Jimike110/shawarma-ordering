@@ -1,13 +1,18 @@
-import { test, expect, type APIRequestContext } from '@playwright/test';
+import { test, expect } from './fixtures';
+import { type APIRequestContext } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 
 const password = process.env.E2E_KITCHEN_PASSWORD;
 const origin = new URL(process.env.E2E_BASE_URL ?? 'http://localhost:5173').origin;
 test.skip(!password, 'Set E2E_KITCHEN_PASSWORD and use a test database.');
 async function login(request: APIRequestContext) {
+  if ((await request.get('/api/auth/me')).ok()) return;
   expect(
     (
-      await request.post('/api/kitchen/login', { headers: { Origin: origin }, data: { password } })
+      await request.post('/api/kitchen/login', {
+        headers: { Origin: origin },
+        data: { username: process.env.E2E_STAFF_USERNAME ?? 'owner', password },
+      })
     ).ok(),
   ).toBe(true);
 }
@@ -211,9 +216,10 @@ test('staff edit shop information and options; kitchen shows new and overdue ord
     originalSettings = menu.settings;
   let orderId: number | undefined;
   try {
-    await page.goto('/kitchen');
+    await page.goto('/staff/stores/1');
+    await page.getByLabel('Логин', { exact: true }).fill(process.env.E2E_STAFF_USERNAME ?? 'owner');
     await page.getByLabel('Пароль', { exact: true }).fill(password!);
-    await page.getByRole('button', { name: 'Войти в кухню' }).click();
+    await page.getByRole('button', { name: 'Войти', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Кухня', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Меню', exact: true }).click();
     await page

@@ -16,13 +16,11 @@ services:
     build: { context: ., dockerfile: backend/Dockerfile }
     environment:
       DATABASE_URL: postgres://shawarma:${POSTGRES_PASSWORD}@db:5432/shawarma?sslmode=disable
-      KITCHEN_PASSWORD: ${KITCHEN_PASSWORD:-}
       SESSION_SECRET: ${SESSION_SECRET:?Set a session secret}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:5173}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       AUTO_MIGRATE: 'true'
       TRUST_PROXY: 'true'
-      STAFF_USERS: ${STAFF_USERS:-}
       ORDER_RETENTION_DAYS: ${ORDER_RETENTION_DAYS:-0}
     depends_on:
       db: { condition: service_healthy }

@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"golang.org/x/crypto/bcrypt"
 	"io"
 	"log"
 	"net"
@@ -21,14 +20,10 @@ import (
 )
 
 type Config struct {
-	Origin       string
-	Secret       string
-	PasswordHash []byte
-	// Stable identity for an environment-supplied shared password, independent of bcrypt's salt.
-	PasswordCredential string
-	Secure             bool
-	TrustProxy         bool
-	StaffUsers         map[string][]byte
+	Origin     string
+	Secret     string
+	Secure     bool
+	TrustProxy bool
 }
 
 func LoadConfig() (Config, error) {
@@ -43,49 +38,8 @@ func LoadConfig() (Config, error) {
 	if len(c.Secret) < 32 {
 		return c, errors.New("SESSION_SECRET must have at least 32 characters")
 	}
-	if users := os.Getenv("STAFF_USERS"); users != "" {
-		var hashes map[string]string
-		if e = json.Unmarshal([]byte(users), &hashes); e != nil || len(hashes) == 0 {
-			return c, errors.New("STAFF_USERS must be a nonempty JSON object of usernames and bcrypt hashes")
-		}
-		c.StaffUsers = map[string][]byte{}
-		for name, hash := range hashes {
-			if name == "" || len(name) > 60 || strings.ContainsAny(name, " \t\r\n") {
-				return c, errors.New("invalid staff username")
-			}
-			if _, e = bcrypt.Cost([]byte(hash)); e != nil {
-				return c, errors.New("invalid staff bcrypt hash")
-			}
-			c.StaffUsers[name] = []byte(hash)
-		}
-	} else if hash := os.Getenv("KITCHEN_PASSWORD_HASH"); hash != "" {
-		c.PasswordHash = []byte(hash)
-		if _, e = bcrypt.Cost(c.PasswordHash); e != nil {
-			return c, e
-		}
-	} else {
-		password := os.Getenv("KITCHEN_PASSWORD")
-		if len(password) < 12 || len(password) > 72 {
-			return c, errors.New("KITCHEN_PASSWORD must have 12 to 72 bytes, or provide KITCHEN_PASSWORD_HASH")
-		}
-		c.PasswordHash, e = bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if e != nil {
-			return c, e
-		}
-		m := hmac.New(sha256.New, []byte(c.Secret))
-		_, _ = m.Write([]byte("shared-kitchen-session-v1\x00"))
-		_, _ = m.Write([]byte(password))
-		c.PasswordCredential = base64.RawURLEncoding.EncodeToString(m.Sum(nil))
-	}
-	return c, nil
-}
 
-func (c Config) credentialHash(hash []byte) string {
-	if len(c.StaffUsers) == 0 && c.PasswordCredential != "" {
-		return c.PasswordCredential
-	}
-	// Explicit bcrypt hashes remain stable and changes still revoke existing sessions.
-	return Hash(string(hash))
+	return c, nil
 }
 
 type API struct {
@@ -101,14 +55,47 @@ func New(store *Store, c Config) *API {
 	mux.HandleFunc("GET /api/menu", a.menu)
 	mux.HandleFunc("POST /api/orders", a.createOrder)
 	mux.HandleFunc("GET /api/orders/{token}", a.track)
+	mux.HandleFunc("GET /api/stores", a.publicShops)
+	mux.HandleFunc("GET /api/stores/{slug}/menu", a.storeMenu)
+	mux.HandleFunc("POST /api/auth/login", a.login)
+	mux.HandleFunc("GET /api/auth/me", a.authenticated(a.me, true))
+	mux.HandleFunc("POST /api/auth/logout", a.authenticated(a.logout, true))
+	mux.HandleFunc("POST /api/auth/change-password", a.authenticated(a.changePassword, true))
+	mux.HandleFunc("POST /api/auth/reauthenticate", a.authenticated(a.reauthenticate, false))
+	mux.HandleFunc("GET /api/staff/stores", a.authenticated(a.staffShops, false))
+	mux.HandleFunc("GET /api/staff/stores/{storeId}/menu", a.scoped(a.menu, false))
+	mux.HandleFunc("GET /api/staff/stores/{storeId}/orders", a.scoped(a.orders, false))
+	mux.HandleFunc("GET /api/staff/stores/{storeId}/history", a.scoped(a.orderHistory, true))
+	mux.HandleFunc("PATCH /api/staff/stores/{storeId}/orders/{id}", a.scoped(a.updateOrder, false))
+	mux.HandleFunc("PATCH /api/staff/stores/{storeId}/operations", a.scoped(a.operational, false))
+	mux.HandleFunc("PATCH /api/staff/stores/{storeId}/products/{id}/availability", a.scoped(a.availability, false))
+	mux.HandleFunc("POST /api/staff/stores/{storeId}/products", a.scoped(a.saveProduct, true))
+	mux.HandleFunc("PUT /api/staff/stores/{storeId}/products/{id}", a.scoped(a.saveProduct, true))
+	mux.HandleFunc("PUT /api/staff/stores/{storeId}/settings", a.scoped(a.saveSettings, true))
+	mux.HandleFunc("GET /api/staff/stores/{storeId}/analytics", a.scoped(a.analytics, true))
+	mux.HandleFunc("GET /api/staff/stores/{storeId}/activity", a.scoped(a.activity, true))
+	mux.HandleFunc("GET /api/owner/stores", a.ownerOnly(a.staffShops, false))
+	mux.HandleFunc("POST /api/owner/stores", a.ownerOnly(a.createShop, true))
+	mux.HandleFunc("PATCH /api/owner/stores/{id}", a.ownerOnly(a.storeLifecycle, true))
+	mux.HandleFunc("GET /api/owner/users", a.ownerOnly(a.listAccounts, false))
+	mux.HandleFunc("POST /api/owner/users", a.ownerOnly(a.saveAccount, true))
+	mux.HandleFunc("PUT /api/owner/users/{id}", a.ownerOnly(a.saveAccount, true))
+	mux.HandleFunc("POST /api/owner/users/{id}/reset-password", a.ownerOnly(a.resetPassword, true))
+	mux.HandleFunc("POST /api/owner/menu-copy", a.ownerOnly(a.copyMenu, true))
+	mux.HandleFunc("GET /api/owner/orders", a.ownerOnly(func(w http.ResponseWriter, r *http.Request) {
+		a.orderHistory(w, r.WithContext(shopContext(r.Context(), 0)))
+	}, false))
+	mux.HandleFunc("GET /api/owner/analytics", a.ownerOnly(a.analytics, false))
+	mux.HandleFunc("GET /api/owner/activity", a.ownerOnly(a.activity, false))
+	// Legacy routes are strictly bound to the original store and the same policies.
 	mux.HandleFunc("POST /api/kitchen/login", a.login)
-	mux.HandleFunc("POST /api/kitchen/logout", a.staff(a.logout))
-	mux.HandleFunc("GET /api/kitchen/session", a.staff(func(w http.ResponseWriter, r *http.Request) { reply(w, 200, map[string]bool{"authenticated": true}) }))
-	mux.HandleFunc("GET /api/kitchen/orders", a.staff(a.orders))
-	mux.HandleFunc("PATCH /api/kitchen/orders/{id}", a.staff(a.updateOrder))
-	mux.HandleFunc("POST /api/kitchen/products", a.staff(a.saveProduct))
-	mux.HandleFunc("PUT /api/kitchen/products/{id}", a.staff(a.saveProduct))
-	mux.HandleFunc("PUT /api/kitchen/settings", a.staff(a.saveSettings))
+	mux.HandleFunc("POST /api/kitchen/logout", a.authenticated(a.logout, true))
+	mux.HandleFunc("GET /api/kitchen/session", a.authenticated(a.me, true))
+	mux.HandleFunc("GET /api/kitchen/orders", a.scoped(a.orders, false))
+	mux.HandleFunc("PATCH /api/kitchen/orders/{id}", a.scoped(a.updateOrder, false))
+	mux.HandleFunc("POST /api/kitchen/products", a.scoped(a.saveProduct, true))
+	mux.HandleFunc("PUT /api/kitchen/products/{id}", a.scoped(a.saveProduct, true))
+	mux.HandleFunc("PUT /api/kitchen/settings", a.scoped(a.saveSettings, true))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, 404, map[string]string{"error": "Маршрут не найден."})
 	})
@@ -194,8 +181,16 @@ func (a *API) menu(w http.ResponseWriter, r *http.Request) {
 		fail(w, e)
 		return
 	}
-	open, message := s.Intake(time.Now())
-	reply(w, 200, map[string]any{"products": p, "settings": s, "accepting_orders": open, "intake_message": message, "estimated_minutes": minutes})
+	shop, e := a.Store.Shop(r.Context(), shopID(r.Context()))
+	if e != nil {
+		fail(w, e)
+		return
+	}
+	open, message := shop.Intake(time.Now())
+	if actor(r.Context()).ID == 0 {
+		shop.StopReason = ""
+	}
+	reply(w, 200, map[string]any{"products": p, "settings": s, "accepting_orders": open, "intake_message": message, "estimated_minutes": minutes, "store": shop})
 }
 func (a *API) clientIP(r *http.Request) string {
 	if a.Config.TrustProxy {
@@ -265,77 +260,6 @@ func (a *API) track(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, 200, o)
-}
-func (a *API) cookie(w http.ResponseWriter, token string, maxAge int) {
-	http.SetCookie(w, &http.Cookie{Name: "kitchen_session", Value: token, Path: "/api/kitchen", HttpOnly: true, Secure: a.Config.Secure, SameSite: http.SameSiteStrictMode, MaxAge: maxAge})
-}
-func (a *API) login(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Password string `json:"password"`
-		Username string `json:"username"`
-	}
-	if !decode(w, r, &input) {
-		return
-	}
-	if !a.limit(w, r, "login", 10) {
-		return
-	}
-	name, hash := "kitchen", a.Config.PasswordHash
-	if len(a.Config.StaffUsers) > 0 {
-		name = input.Username
-		hash = a.Config.StaffUsers[name]
-	}
-	// Unknown usernames still perform bcrypt work to avoid disclosing staff names.
-	if len(hash) == 0 {
-		hash = []byte("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
-	}
-	if bcrypt.CompareHashAndPassword(hash, []byte(input.Password)) != nil || (len(a.Config.StaffUsers) > 0 && a.Config.StaffUsers[name] == nil) {
-		reply(w, 401, map[string]string{"error": "Неверный логин или пароль."})
-		return
-	}
-	token := randomToken()
-	if e := a.Store.CreateNamedSession(r.Context(), token, name, a.Config.credentialHash(hash)); e != nil {
-		fail(w, e)
-		return
-	}
-	a.cookie(w, token, 43200)
-	reply(w, 200, map[string]bool{"authenticated": true})
-}
-func (a *API) staff(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" && r.Header.Get("Origin") != a.Config.Origin {
-			reply(w, 403, map[string]string{"error": "Недопустимый источник запроса."})
-			return
-		}
-		c, e := r.Cookie("kitchen_session")
-		if e != nil || len(c.Value) != 43 {
-			reply(w, 401, map[string]string{"error": "Войдите в панель кухни."})
-			return
-		}
-		name, credential, ok, e := a.Store.SessionIdentity(r.Context(), c.Value)
-		if e != nil {
-			fail(w, e)
-			return
-		}
-		hash := a.Config.PasswordHash
-		if len(a.Config.StaffUsers) > 0 {
-			hash = a.Config.StaffUsers[name]
-		}
-		if !ok || len(hash) == 0 || (credential != "" && credential != a.Config.credentialHash(hash)) {
-			reply(w, 401, map[string]string{"error": "Сессия истекла. Войдите снова."})
-			return
-		}
-		next(w, r.WithContext(context.WithValue(r.Context(), staffContextKey{}, name)))
-	}
-}
-func (a *API) logout(w http.ResponseWriter, r *http.Request) {
-	c, _ := r.Cookie("kitchen_session")
-	if e := a.Store.Logout(r.Context(), c.Value); e != nil {
-		fail(w, e)
-		return
-	}
-	a.cookie(w, "", -1)
-	reply(w, 200, map[string]bool{"authenticated": false})
 }
 func (a *API) orders(w http.ResponseWriter, r *http.Request) {
 	o, e := a.Store.Orders(r.Context())

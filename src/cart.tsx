@@ -4,9 +4,13 @@ export const MAX_ITEMS = 50;
 export const lineKey = (line: CartLine) =>
   line.product_id + ':' + [...(line.options ?? [])].sort().join(',');
 export const cartCount = (lines: CartLine[]) => lines.reduce((sum, line) => sum + line.quantity, 0);
-export function readCart(): CartLine[] {
+export function readCart(storeId = 1): CartLine[] {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem('shawarma-cart') ?? '[]');
+    const value: unknown = JSON.parse(
+      localStorage.getItem('shawarma-cart-v3:' + storeId) ??
+        (storeId === 1 ? localStorage.getItem('shawarma-cart') : null) ??
+        '[]',
+    );
     if (!Array.isArray(value)) return [];
     const result: CartLine[] = [],
       seen = new Set<string>();
@@ -89,13 +93,14 @@ interface CartValue {
   clear: () => void;
 }
 const CartContext = createContext<CartValue | null>(null);
-export function CartProvider({ children }: { children: ReactNode }) {
-  const [lines, setLines] = useState<CartLine[]>(readCart);
+export function CartProvider({ children, storeId = 1 }: { children: ReactNode; storeId?: number }) {
+  const [lines, setLines] = useState<CartLine[]>(() => readCart(storeId));
   const save = (update: (previous: CartLine[]) => CartLine[]) => {
     setLines((previous) => {
       const next = update(previous);
       try {
-        localStorage.setItem('shawarma-cart', JSON.stringify(next));
+        localStorage.setItem('shawarma-cart-v3:' + storeId, JSON.stringify(next));
+        if (storeId === 1) localStorage.removeItem('shawarma-cart');
       } catch {}
       return next;
     });

@@ -1,3 +1,6 @@
+import { Link } from 'react-router-dom';
+import { useAuth, useStaffStore } from '../staff';
+import { WorkerSettings } from './WorkerSettings';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   Clock3,
@@ -14,7 +17,7 @@ import {
   VolumeX,
   ClipboardList,
 } from 'lucide-react';
-import { api, ApiError, errorMessage, json } from '../api';
+import { ApiError, errorMessage, json } from '../api';
 import { usePolling } from '../usePolling';
 import { FoodImage, Loading, Notice } from '../ui';
 import { useMenu } from '../menu';
@@ -39,6 +42,68 @@ const actionLabels: Partial<Record<Status, string>> = {
   ready: 'Выдать заказ',
 };
 const preparationTimes = [5, 10, 15, 20, 30];
+function PauseDialog({
+  reason,
+  setReason,
+  busy,
+  close,
+  submit,
+}: {
+  reason: string;
+  setReason: (s: string) => void;
+  busy: boolean;
+  close: () => void;
+  submit: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const restore = document.activeElement as HTMLElement;
+    ref.current?.showModal();
+    return () => {
+      ref.current?.close();
+      restore?.focus();
+    };
+  }, []);
+  return (
+    <dialog
+      className="admin-modal"
+      ref={ref}
+      aria-label="Пауза приёма заказов"
+      onCancel={(e) => {
+        e.preventDefault();
+        close();
+      }}
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <h2>Пауза приёма заказов</h2>
+        <p>Активные заказы останутся в работе. Причину увидит владелец.</p>
+        <label>
+          Причина паузы
+          <textarea
+            autoFocus
+            required
+            maxLength={300}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </label>
+        <div className="form-actions">
+          <button className="button" disabled={busy}>
+            Приостановить
+          </button>
+          <button type="button" className="button secondary" disabled={busy} onClick={close}>
+            Назад
+          </button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
 function TimePresets({
   value,
   onChange,
@@ -75,6 +140,7 @@ function OrderCard({
   reload: () => void;
   expired: () => void;
 }) {
+  const { request: api } = useStaffStore();
   const [minutes, setMinutes] = useState(
     Math.max(
       1,
@@ -261,6 +327,7 @@ function ProductEditor({
   done: () => void;
   expired: () => void;
 }) {
+  const { request: api } = useStaffStore();
   const [value, setValue] = useState({
     ...product,
     ingredients: product.ingredients ?? '',
@@ -475,6 +542,7 @@ function SettingsForm({
   saved: () => void;
   expired: () => void;
 }) {
+  const { request: api } = useStaffStore();
   const [value, setValue] = useState(settings),
     [dirty, setDirty] = useState(false);
   const [error, setError] = useState(''),
@@ -699,39 +767,33 @@ function SettingsForm({
   );
 }
 export function Kitchen() {
-  const [auth, setAuth] = useState<boolean | null>(null),
-    [password, setPassword] = useState(''),
-    [username, setUsername] = useState('');
+  const { invalidate } = useAuth();
+  const { request: api, role, id: storeId } = useStaffStore();
+  const auth = true;
+  const setAuth = (_: boolean) => invalidate();
   const [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState('orders'),
     [filter, setFilter] = useState('active');
+  const [pauseDialog, setPauseDialog] = useState(false),
+    [pauseReason, setPauseReason] = useState('');
   const [editing, setEditing] = useState<Product | null>(null),
     [search, setSearch] = useState('');
   const [sound, setSound] = useState(false),
     [newCount, setNewCount] = useState(0);
   const audio = useRef<AudioContext | null>(null),
     seen = useRef<Set<number> | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    api('/kitchen/session', { signal: controller.signal })
-      .then(() => setAuth(true))
-      .catch((e) => {
-        if (!controller.signal.aborted) {
-          setAuth(false);
-          if (!(e instanceof ApiError && e.status === 401)) setError(errorMessage(e));
-        }
-      });
-    return () => controller.abort();
-  }, []);
-  const loadOrders = useCallback(async (signal: AbortSignal) => {
-    try {
-      return await api<Order[]>('/kitchen/orders', { signal });
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 401) setAuth(false);
-      throw e;
-    }
-  }, []);
+  const loadOrders = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        return await api<Order[]>('/kitchen/orders', { signal });
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) setAuth(false);
+        throw e;
+      }
+    },
+    [api, invalidate],
+  );
   const queue = usePolling(loadOrders, 5000, auth === true),
     menu = useMenu();
   useEffect(() => {
@@ -782,41 +844,22 @@ export function Kitchen() {
     queue.refresh();
     menu.refresh();
   };
-  async function login(e: FormEvent) {
-    e.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      await api('/kitchen/login', { method: 'POST', body: json({ password, username }) });
-      setPassword('');
-      setAuth(true);
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function logout() {
-    setBusy(true);
-    try {
-      await api('/kitchen/logout', { method: 'POST', body: '{}' });
-      setAuth(false);
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
   async function togglePause() {
     if (!menu.data || busy) return;
     setBusy(true);
     setError('');
     try {
-      await api('/kitchen/settings', {
-        method: 'PUT',
-        body: json({ ...menu.data.settings, paused: !menu.data.settings.paused }),
+      const reason = menu.data.settings.paused ? '' : pauseReason;
+      if (!menu.data.settings.paused && !reason.trim()) {
+        setPauseDialog(true);
+        return;
+      }
+      await api('/kitchen/operations', {
+        method: 'PATCH',
+        body: json({ paused: !menu.data.settings.paused, reason }),
       });
+      setPauseReason('');
+      setPauseDialog(false);
       menu.refresh();
     } catch (e) {
       setError(errorMessage(e));
@@ -830,13 +873,9 @@ export function Kitchen() {
     setBusy(true);
     setError('');
     try {
-      // Read current editable fields immediately before the full-object PUT.
-      const current = await api<{ products: Product[] }>('/menu');
-      const latest = current.products.find((p) => p.id === product.id);
-      if (!latest) throw new Error('Товар больше недоступен. Обновите меню.');
-      await api('/kitchen/products/' + product.id, {
-        method: 'PUT',
-        body: json({ ...latest, available: !product.available }),
+      await api('/kitchen/products/' + product.id + '/availability', {
+        method: 'PATCH',
+        body: json({ available: !product.available }),
       });
       menu.refresh();
     } catch (e) {
@@ -846,46 +885,6 @@ export function Kitchen() {
       setBusy(false);
     }
   }
-  if (auth === null) return <Loading />;
-  if (!auth)
-    return (
-      <main className="container login">
-        <form className="panel login-card" onSubmit={login}>
-          <span className="round-icon">
-            <LockKeyhole size={26} />
-          </span>
-          <div className="eyebrow">ТОЛЬКО ДЛЯ СОТРУДНИКОВ</div>
-          <h1>Вход в кухню</h1>
-          <p>Войдите, чтобы принимать и готовить заказы.</p>
-          <label>
-            Логин <span className="optional">для персонального доступа</span>
-            <input
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              maxLength={60}
-              disabled={busy}
-              placeholder="Если выдан администратором"
-            />
-          </label>
-          <label>
-            Пароль
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={busy}
-            />
-          </label>
-          {error && <Notice>{error}</Notice>}
-          <button className="button full" disabled={busy}>
-            {busy ? 'Входим…' : 'Войти в кухню'}
-          </button>
-        </form>
-      </main>
-    );
   const orders = queue.data ?? [],
     active = orders.filter((o) => o.status !== 'completed' && o.status !== 'cancelled');
   const overdue = active.filter(
@@ -903,24 +902,32 @@ export function Kitchen() {
           <div className="eyebrow">{menu.data?.settings.address || 'ПАНЕЛЬ СОТРУДНИКОВ'}</div>
           <h1>Кухня</h1>
         </div>
-        <button className="button secondary" disabled={busy} onClick={() => void logout()}>
-          <LogOut size={17} /> Выйти
-        </button>
       </div>
+      {pauseDialog && (
+        <PauseDialog
+          reason={pauseReason}
+          setReason={setPauseReason}
+          busy={busy}
+          close={() => setPauseDialog(false)}
+          submit={() => void togglePause()}
+        />
+      )}
       <div className="kitchen-toolbar">
         <span className={'intake-status ' + (!menu.data?.accepting_orders ? 'paused' : '')}>
           <span className="status-dot" />
           {!menu.data
             ? 'Загружаем статус…'
-            : menu.data.settings.paused
-              ? 'Приём на паузе'
-              : menu.data.accepting_orders
-                ? 'Принимаем заказы'
-                : 'Закрыто по расписанию'}
+            : menu.data.store?.owner_stopped
+              ? 'Стоп владельца'
+              : menu.data.settings.paused
+                ? 'Приём на паузе'
+                : menu.data.accepting_orders
+                  ? 'Принимаем заказы'
+                  : 'Закрыто по расписанию'}
         </span>
         <button
           className="button secondary small"
-          disabled={!menu.data || busy}
+          disabled={!menu.data || busy || menu.data.store?.owner_stopped}
           onClick={() => void togglePause()}
         >
           {menu.data?.settings.paused ? <Play size={16} /> : <Pause size={16} />}{' '}
@@ -1079,27 +1086,29 @@ export function Kitchen() {
             <>
               <div className="section-top">
                 <h2>Ваше меню</h2>
-                <button
-                  className="button small"
-                  onClick={() =>
-                    setEditing({
-                      id: 0,
-                      name: '',
-                      description: '',
-                      price: 290,
-                      image: '/images/classic.jpg',
-                      weight: '',
-                      category: 'Шаверма',
-                      available: true,
-                      sort_order: (menu.data?.products.length ?? 0) + 1,
-                      ingredients: '',
-                      allergens: '',
-                      options: [],
-                    })
-                  }
-                >
-                  <Plus size={18} /> Добавить товар
-                </button>
+                {role !== 'worker' && (
+                  <button
+                    className="button small"
+                    onClick={() =>
+                      setEditing({
+                        id: 0,
+                        name: '',
+                        description: '',
+                        price: 290,
+                        image: '/images/classic.jpg',
+                        weight: '',
+                        category: 'Шаверма',
+                        available: true,
+                        sort_order: (menu.data?.products.length ?? 0) + 1,
+                        ingredients: '',
+                        allergens: '',
+                        options: [],
+                      })
+                    }
+                  >
+                    <Plus size={18} /> Добавить товар
+                  </button>
+                )}
               </div>
               <div className="staff-products">
                 {menu.data?.products.map((p) => (
@@ -1125,9 +1134,11 @@ export function Kitchen() {
                         {p.available ? 'В продаже' : 'Недоступен'}
                       </button>
                     </div>
-                    <button className="button secondary small" onClick={() => setEditing(p)}>
-                      Изменить
-                    </button>
+                    {role !== 'worker' && (
+                      <button className="button secondary small" onClick={() => setEditing(p)}>
+                        Изменить
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1135,9 +1146,13 @@ export function Kitchen() {
           )}
         </>
       )}
-      {tab === 'settings' && menu.data && (
-        <SettingsForm settings={menu.data.settings} saved={menu.refresh} expired={expired} />
-      )}
+      {tab === 'settings' &&
+        menu.data &&
+        (role === 'worker' ? (
+          <WorkerSettings settings={menu.data.settings} saved={menu.refresh} />
+        ) : (
+          <SettingsForm settings={menu.data.settings} saved={menu.refresh} expired={expired} />
+        ))}
     </main>
   );
 }
