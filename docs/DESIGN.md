@@ -41,6 +41,16 @@ Keep private tracking, complete local order history, server-calculated prices, h
 - Opening hours remain per-day editable; «Как в понедельник — на всю неделю» copies the Monday shift into the draft. Disabled scheduling and overnight hours retain their existing semantics. Copying does not auto-save.
 - Show unsaved settings state and keep the save action reachable above mobile navigation. Product options, day/time fields, and editor action rows must fit at 320px.
 
+## Owner workspace
+
+Keep the owner workspace distinct from the shift kitchen. Its four primary destinations are URL-backed **Обзор, Точки, Сотрудники, Аналитика**; privacy is a secondary business-wide destination. Use the 232px desktop sidebar from 1024px and four fixed bottom destinations below it. Reserve safe-area space. The header's store selector carries `store_id` through navigation; filters and report views live in URLs, not browser storage.
+
+Lead the overview with actionable intake blockers and overdue queues, then current store rows, today's Moscow-date cohort and five recent cancellations/actions. Scheduled closure is informational. Show server-provided `intake_blockers`, including overlapping reasons; lifting an owner stop does not resolve other blockers. Never call completed-order value verified revenue or profit.
+
+Use compact desktop rows, stacked phone cards, restrained type and neutral action menus. Store search/archive filters and staff search/access/role filters remain visible. Account editors always expose complete business-wide assignments, even when their list was filtered. Confirm destructive access changes, preserve drafts through errors/reauthentication, and warn before leaving unsaved edits. Privacy separates documents, verified requests and retention; publication and cleanup remain explicit protected actions.
+
+Reports retain real timing sample counts, labelled axes/units, zero-order days and an accessible data table. Scope changes clear old data immediately and cancel requests; same-scope refresh errors may retain results only with a stale-data timestamp. Do not disguise failed requests as zero or rely on colour alone.
+
 ## Accessibility and verification
 
 Use native buttons, labels, checkboxes, forms, switches, and dialogs. Preserve visible focus, 44px primary touch targets, 16px text inputs, semantic grouping, reduced-motion support, safe-area padding, and labelled live messages. Icons supplement text rather than replacing ambiguous actions. Do not allow decorative status dots to carry the only meaning.

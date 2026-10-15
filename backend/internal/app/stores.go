@@ -13,17 +13,18 @@ import (
 )
 
 type Shop struct {
-	ID           int64          `json:"id"`
-	Slug         string         `json:"slug"`
-	Published    bool           `json:"published"`
-	Archived     bool           `json:"archived"`
-	OwnerStopped bool           `json:"owner_stopped"`
-	StopReason   string         `json:"stop_reason"`
-	Settings     Settings       `json:"settings"`
-	Role         string         `json:"role,omitempty"`
-	Accepting    bool           `json:"accepting_orders"`
-	Message      string         `json:"intake_message"`
-	Counts       map[string]int `json:"counts,omitempty"`
+	ID             int64          `json:"id"`
+	Slug           string         `json:"slug"`
+	Published      bool           `json:"published"`
+	Archived       bool           `json:"archived"`
+	OwnerStopped   bool           `json:"owner_stopped"`
+	StopReason     string         `json:"stop_reason"`
+	Settings       Settings       `json:"settings"`
+	Role           string         `json:"role,omitempty"`
+	Accepting      bool           `json:"accepting_orders"`
+	Message        string         `json:"intake_message"`
+	Counts         map[string]int `json:"counts,omitempty"`
+	IntakeBlockers []string       `json:"intake_blockers"`
 }
 
 func (s *Store) Shop(ctx context.Context, id int64) (Shop, error) {
@@ -39,7 +40,8 @@ func (s *Store) Shop(ctx context.Context, id int64) (Shop, error) {
 	if e != nil {
 		return p, e
 	}
-	p.Accepting, p.Message = p.Intake(time.Now())
+	now := time.Now()
+	p.Accepting, p.Message = p.Intake(now)
 	var privacyReady bool
 	if e = s.DB.QueryRowContext(ctx, "SELECT current_version IS NOT NULL FROM privacy_settings WHERE id=1").Scan(&privacyReady); e != nil {
 		return p, e
@@ -48,7 +50,34 @@ func (s *Store) Shop(ctx context.Context, id int64) (Shop, error) {
 		p.Accepting = false
 		p.Message = "Оператор ещё не опубликовал документы. Приём новых заказов недоступен."
 	}
+	p.IntakeBlockers = p.Blockers(now, privacyReady)
 	return p, nil
+}
+
+// Blockers explain every independent intake condition without changing enforcement.
+func (s Shop) Blockers(now time.Time, privacyReady bool) []string {
+	out := []string{}
+	if s.Archived {
+		out = append(out, "archived")
+	}
+	if !s.Published {
+		out = append(out, "unpublished")
+	}
+	if !privacyReady {
+		out = append(out, "privacy_unpublished")
+	}
+	if s.OwnerStopped {
+		out = append(out, "owner_stopped")
+	}
+	if s.Settings.Paused {
+		out = append(out, "paused")
+	}
+	schedule := s.Settings
+	schedule.Paused = false
+	if open, _ := schedule.Intake(now); !open {
+		out = append(out, "outside_hours")
+	}
+	return out
 }
 func (s Shop) Intake(now time.Time) (bool, string) {
 	if s.Archived || !s.Published {
@@ -399,10 +428,37 @@ type Activity struct {
 	At       time.Time       `json:"created_at"`
 }
 
+// Only owner endpoints accept a reporting filter. Scoped requests keep the
+// already-authorized context, even when a caller supplies a forged query value.
+func (a *API) reportStore(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	if id, scoped := r.Context().Value(storeKey{}).(int64); scoped && id != 0 {
+		return id, true
+	}
+	value := r.URL.Query().Get("store_id")
+	if value == "" {
+		return 0, true
+	}
+	id, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || id < 1 {
+		fail(w, problem(400, "Проверьте точку."))
+		return 0, false
+	}
+	var exists bool
+	if err = a.Store.DB.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM stores WHERE id=$1)", id).Scan(&exists); err != nil {
+		fail(w, err)
+		return 0, false
+	}
+	if !exists {
+		fail(w, ErrMissing)
+		return 0, false
+	}
+	return id, true
+}
+
 func (a *API) activity(w http.ResponseWriter, r *http.Request) {
-	id := int64(0)
-	if _, ok := r.Context().Value(storeKey{}).(int64); ok {
-		id = shopID(r.Context())
+	id, ok := a.reportStore(w, r)
+	if !ok {
+		return
 	}
 	before := int64(0)
 	if v := r.URL.Query().Get("before"); v != "" {
@@ -590,15 +646,9 @@ func (a *API) analytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	end = end.AddDate(0, 0, 1)
-	id := int64(0)
-	if _, ok := r.Context().Value(storeKey{}).(int64); ok {
-		id = shopID(r.Context())
-	} else if value := r.URL.Query().Get("store_id"); value != "" {
-		id, e = strconv.ParseInt(value, 10, 64)
-		if e != nil || id < 1 {
-			fail(w, problem(400, "Проверьте точку."))
-			return
-		}
+	id, ok := a.reportStore(w, r)
+	if !ok {
+		return
 	}
 	report := Analytics{From: from, To: to, StoreID: id, Statuses: map[string]int{}, Daily: []DailyMetric{}, Products: []ProductMetric{}, Stores: []StoreMetric{}}
 	ctx := r.Context()
@@ -710,6 +760,10 @@ func (a *API) analytics(w http.ResponseWriter, r *http.Request) {
 	reply(w, 200, report)
 }
 func (a *API) orderHistory(w http.ResponseWriter, r *http.Request) {
+	id, ok := a.reportStore(w, r)
+	if !ok {
+		return
+	}
 	before := int64(0)
 	if value := r.URL.Query().Get("before"); value != "" {
 		var e error
@@ -724,7 +778,7 @@ func (a *API) orderHistory(w http.ResponseWriter, r *http.Request) {
 		fail(w, problem(400, "Некорректный статус."))
 		return
 	}
-	rows, e := a.Store.DB.QueryContext(r.Context(), "SELECT "+orderCols+" FROM orders WHERE ($1::bigint=0 OR store_id=$1) AND ($2::bigint=0 OR id<$2) AND ($3='' OR status=$3) ORDER BY id DESC LIMIT 100", shopID(r.Context()), before, status)
+	rows, e := a.Store.DB.QueryContext(r.Context(), "SELECT "+orderCols+" FROM orders WHERE ($1::bigint=0 OR store_id=$1) AND ($2::bigint=0 OR id<$2) AND ($3='' OR status=$3) ORDER BY id DESC LIMIT 100", id, before, status)
 	if e != nil {
 		fail(w, e)
 		return

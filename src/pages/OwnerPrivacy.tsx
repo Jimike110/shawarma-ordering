@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorMessage, json } from '../api';
 import { Notice } from '../ui';
 import type { Operator, PrivacyDocument } from '../privacy';
 import type { Store } from '../types';
-import { Modal } from './Owner';
+import { Modal } from './OwnerForms';
+import { Subnav } from './Owner';
+import { OwnerLoading, useOwnerDraft } from '../ownerWorkspace';
 
 interface PrivacyState {
   draft: Operator;
@@ -79,6 +81,8 @@ const statuses: Record<string, string> = {
 };
 
 export function OwnerPrivacy() {
+  const [params, setParams] = useSearchParams();
+  const section = params.get('section') ?? 'documents';
   const [state, setState] = useState<PrivacyState | null>(null);
   const [draft, setDraft] = useState<Operator | null>(null);
   const [retention, setRetention] = useState<Retention | null>(null);
@@ -100,6 +104,8 @@ export function OwnerPrivacy() {
   const [verification, setVerification] = useState('personal_link_and_purchase');
   const [name, setName] = useState(''),
     [note, setNote] = useState('');
+  const dirty = !!state && JSON.stringify(draft) !== JSON.stringify(state.draft);
+  useOwnerDraft(dirty || !!name || !!note || !!orderId);
   useEffect(() => {
     const controller = new AbortController();
     void Promise.all([
@@ -226,12 +232,24 @@ export function OwnerPrivacy() {
     requests.find((r) => r.id === selected) ??
     (caseRecord?.id === selected ? caseRecord : undefined);
   return (
-    <main className="container owner-page privacy-workspace">
-      <Link className="back-link" to="/owner">
-        ← Обзор владельца
-      </Link>
+    <div className="owner-page privacy-workspace">
       <h1>Персональные данные</h1>
-      <p className="lead">Документы и обращения для всех точек одного оператора.</p>
+      <p className="owner-scope-label">
+        Для всего бизнеса · документы и обращения одного оператора
+      </p>
+      <Subnav
+        values={[
+          ['documents', 'Документы'],
+          ['requests', 'Обращения'],
+          ['retention', 'Сроки и очистка'],
+        ]}
+        value={section}
+        change={(v) => {
+          const p = new URLSearchParams(params);
+          p.set('section', v);
+          setParams(p);
+        }}
+      />
       <Notice kind="warning">
         Публикация настраивает документы сервиса. До работы с реальными данными отдельно проверьте
         российское размещение приложения, БД, журналов и копий, договоры и меры защиты. Публикация
@@ -239,6 +257,7 @@ export function OwnerPrivacy() {
       </Notice>
       {error && <Notice>{error}</Notice>}
       {message && <p role="status">{message}</p>}
+      {!state && !error && <OwnerLoading />}
       {needsPassword && (
         <Modal
           title="Подтвердите пароль"
@@ -287,8 +306,13 @@ export function OwnerPrivacy() {
       )}
       {state && draft && (
         <>
-          <form className="panel privacy-section" onSubmit={save}>
+          <form hidden={section !== 'documents'} className="panel privacy-section" onSubmit={save}>
             <h2>Оператор и черновик</h2>
+            <p className="owner-draft-state" role="status">
+              {dirty
+                ? 'Есть несохранённые изменения'
+                : 'Черновик сохранён · версия ' + state.revision}
+            </p>
             <p>
               Реквизиты компании или ИП, а не название заведения. Пустые поля не заполняются
               автоматически.
@@ -304,33 +328,47 @@ export function OwnerPrivacy() {
                 <option value="ip">Индивидуальный предприниматель</option>
               </select>
             </label>
-            <div className="privacy-form-grid">
-              {fields.map((f) => (
-                <label key={f.key} className={f.long ? 'wide' : ''}>
-                  {f.label}
-                  {f.long ? (
-                    <textarea
-                      value={draft[f.key] || ''}
-                      maxLength={3000}
-                      rows={3}
-                      onChange={(e) =>
-                        setDraft({ ...draft, [f.key]: e.target.value, approved: false })
-                      }
-                    />
-                  ) : (
-                    <input
-                      type={f.key === 'contact' ? 'email' : 'text'}
-                      value={draft[f.key] || ''}
-                      maxLength={3000}
-                      onChange={(e) =>
-                        setDraft({ ...draft, [f.key]: e.target.value, approved: false })
-                      }
-                    />
-                  )}
-                  {f.hint && <small>{f.hint}</small>}
-                </label>
-              ))}
-            </div>
+            {[
+              {
+                title: 'Реквизиты оператора',
+                keys: ['legal_name', 'inn', 'registration', 'address', 'contact'],
+              },
+              { title: 'Обработчики и размещение', keys: ['contractors', 'locations'] },
+              { title: 'Данные сотрудников', keys: ['staff_basis'] },
+            ].map((group) => (
+              <fieldset key={group.title}>
+                <legend>{group.title}</legend>
+                <div className="privacy-form-grid">
+                  {fields
+                    .filter((f) => group.keys.includes(f.key))
+                    .map((f) => (
+                      <label key={f.key} className={f.long ? 'wide' : ''}>
+                        {f.label}
+                        {f.long ? (
+                          <textarea
+                            value={draft[f.key] || ''}
+                            maxLength={3000}
+                            rows={3}
+                            onChange={(e) =>
+                              setDraft({ ...draft, [f.key]: e.target.value, approved: false })
+                            }
+                          />
+                        ) : (
+                          <input
+                            type={f.key === 'contact' ? 'email' : 'text'}
+                            value={draft[f.key] || ''}
+                            maxLength={3000}
+                            onChange={(e) =>
+                              setDraft({ ...draft, [f.key]: e.target.value, approved: false })
+                            }
+                          />
+                        )}
+                        {f.hint && <small>{f.hint}</small>}
+                      </label>
+                    ))}
+                </div>
+              </fieldset>
+            ))}
             <label className="privacy-check">
               <input
                 type="checkbox"
@@ -346,7 +384,7 @@ export function OwnerPrivacy() {
               Сохранить черновик
             </button>
           </form>
-          <section className="panel privacy-section">
+          <section hidden={section !== 'documents'} className="panel privacy-section">
             <h2>Публикация</h2>
             <p>
               {state.current
@@ -388,7 +426,7 @@ export function OwnerPrivacy() {
               </p>
             )}
           </section>
-          <section className="panel privacy-section">
+          <section hidden={section !== 'retention'} className="panel privacy-section">
             <h2>Сроки и очистка</h2>
             <button
               className="text-link"
@@ -471,7 +509,7 @@ export function OwnerPrivacy() {
               </>
             )}
           </section>
-          <section className="panel privacy-section">
+          <section hidden={section !== 'requests'} className="panel privacy-section">
             <h2>Обращения гостей</h2>
             <p>
               Принимайте обращения по опубликованному контакту. Проверяйте принадлежность
@@ -487,6 +525,7 @@ export function OwnerPrivacy() {
                     body: json({ store_id: Number(storeId), order_number: Number(orderId), kind }),
                   });
                   setSelected(created.id);
+                  setOrderId('');
                   await loadRequests();
                   setMessage(
                     'Обращение зарегистрировано. Перед действиями подтвердите принадлежность данных.',
@@ -652,6 +691,6 @@ export function OwnerPrivacy() {
           </section>
         </>
       )}
-    </main>
+    </div>
   );
 }

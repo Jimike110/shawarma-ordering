@@ -1,12 +1,13 @@
 import { useCallback, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { usePolling } from '../usePolling';
 import { Notice, Loading } from '../ui';
 import { useStaffStore } from '../staff';
 import { clock, rub, statusLabels, type Store, type Order } from '../types';
+import { OwnerLoading, RefreshStatus } from '../ownerWorkspace';
 
-interface Report {
+export interface Report {
   orders: number;
   statuses: Record<string, number>;
   completed_value: number;
@@ -34,26 +35,181 @@ export const moscowDate = () =>
     month: '2-digit',
     day: '2-digit',
   }).format(new Date());
+export function dailySeries(daily: Report['daily'], from: string, to: string): Report['daily'] {
+  const start = Date.parse(from),
+    end = Date.parse(to);
+  if (
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    end < start ||
+    end - start > 365 * 86400000
+  )
+    return [];
+  const values = new Map(daily.map((d) => [d.date, d]));
+  return Array.from({ length: Math.round((end - start) / 86400000) + 1 }, (_, i) => {
+    const date = new Date(start + i * 86400000).toISOString().slice(0, 10);
+    return values.get(date) ?? { date, orders: 0, completed_value: 0 };
+  });
+}
+function DailyChart({ daily, from, to }: { daily: Report['daily']; from: string; to: string }) {
+  const days = dailySeries(daily, from, to),
+    max = Math.max(2, ...days.map((d) => d.orders));
+  const x = (i: number) =>
+    days.length === 1 ? 300 : 10 + (i / Math.max(1, days.length - 1)) * 580;
+  const y = (n: number) => 150 - (n / max) * 140;
+  const label = (s: string) => s.slice(8) + '.' + s.slice(5, 7);
+  return (
+    <figure className="owner-chart">
+      <figcaption>Количество заказов, шт.</figcaption>
+      <div className="owner-chart-body">
+        <div className="owner-chart-y">
+          <span>{max}</span>
+          <span>{Math.round(max / 2)}</span>
+          <span>0</span>
+        </div>
+        <svg
+          viewBox="0 0 600 160"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label={'Заказы по дням с ' + from + ' по ' + to + '; точные значения в таблице ниже'}
+        >
+          {[0, max / 2, max].map((n) => (
+            <line key={n} x1="0" x2="600" y1={y(n)} y2={y(n)} stroke="var(--line)" />
+          ))}
+          <path
+            d={days.map((d, i) => (i ? 'L' : 'M') + x(i) + ',' + y(d.orders)).join(' ')}
+            fill="none"
+            stroke="var(--orange)"
+            strokeWidth="2.5"
+            vectorEffect="non-scaling-stroke"
+          />
+          {days.map((d, i) => (
+            <circle
+              key={d.date}
+              cx={x(i)}
+              cy={y(d.orders)}
+              r={days.length > 31 ? 2 : 4}
+              fill="var(--orange)"
+            >
+              <title>
+                {d.date}: {d.orders} заказов
+              </title>
+            </circle>
+          ))}
+        </svg>
+      </div>
+      <div className="owner-chart-x">
+        <span>{label(from)}</span>
+        {days.length > 2 && <span>{label(days[Math.floor(days.length / 2)].date)}</span>}
+        <span>{label(to)}</span>
+      </div>
+    </figure>
+  );
+}
+export function TodaySummary({ storeId }: { storeId: string }) {
+  const today = moscowDate();
+  const load = useCallback(
+    (signal: AbortSignal) =>
+      api<Report>(
+        '/owner/analytics?' +
+          new URLSearchParams({
+            from: today,
+            to: today,
+            ...(storeId ? { store_id: storeId } : {}),
+          }),
+        { signal },
+      ),
+    [today, storeId],
+  );
+  const q = usePolling(load, 30000);
+  return (
+    <section className="owner-section">
+      <div className="owner-section-heading">
+        <h2>Сегодня, МСК</h2>
+        <span className="fine-print">По дате создания заказа</span>
+      </div>
+      <RefreshStatus error={q.error} lastUpdated={q.lastUpdated} refresh={q.refresh} />
+      {!q.data && !q.error && <OwnerLoading />}
+      {q.data && (
+        <>
+          <dl className="report-metrics">
+            <div>
+              <dt>Заказов</dt>
+              <dd>{q.data.orders}</dd>
+            </div>
+            <div>
+              <dt>Стоимость выданных</dt>
+              <dd>{rub(q.data.completed_value)}</dd>
+            </div>
+            <div>
+              <dt>Средний выданный заказ</dt>
+              <dd>{rub(Math.round(q.data.average_basket))}</dd>
+            </div>
+            <div>
+              <dt>Отменено</dt>
+              <dd>{q.data.statuses.cancelled ?? 0}</dd>
+            </div>
+          </dl>
+          <p className="fine-print">
+            Стоимость выданных заказов не подтверждает полученную оплату и не является прибылью.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
 const previousDate = (date: string, n: number) => {
   const d = new Date(date + 'T12:00:00Z');
   d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString().slice(0, 10);
 };
-export function AnalyticsPanel({ endpoint, stores = [] }: { endpoint: string; stores?: Store[] }) {
+export function AnalyticsPanel({
+  endpoint,
+  stores = [],
+  owner = false,
+}: {
+  endpoint: string;
+  stores?: Store[];
+  owner?: boolean;
+}) {
+  const [params, setParams] = useSearchParams();
   const [to, setTo] = useState(moscowDate),
     [from, setFrom] = useState(() => previousDate(moscowDate(), 6)),
-    [store, setStore] = useState('');
+    [localStore, setStore] = useState('');
+  const fromValue = owner ? (params.get('from') ?? from) : from;
+  const toValue = owner ? (params.get('to') ?? to) : to;
+  const store = owner ? (params.get('store_id') ?? '') : localStore;
+  function dates(start: string, end: string) {
+    if (owner) {
+      const p = new URLSearchParams(params);
+      p.set('from', start);
+      p.set('to', end);
+      setParams(p);
+    } else {
+      setFrom(start);
+      setTo(end);
+    }
+  }
   const valid =
-    !!from && !!to && from <= to && (Date.parse(to) - Date.parse(from)) / 86400000 <= 365;
+    !!fromValue &&
+    !!toValue &&
+    fromValue <= toValue &&
+    (Date.parse(toValue) - Date.parse(fromValue)) / 86400000 <= 365;
   const load = useCallback(
     (signal: AbortSignal) =>
       api<Report>(
-        endpoint + '?' + new URLSearchParams({ from, to, ...(store ? { store_id: store } : {}) }),
+        endpoint +
+          '?' +
+          new URLSearchParams({
+            from: fromValue,
+            to: toValue,
+            ...(store ? { store_id: store } : {}),
+          }),
         { signal },
       ),
-    [endpoint, from, to, store],
+    [endpoint, fromValue, toValue, store],
   );
-  const { data, error, loading, refresh } = usePolling(load, 30000, valid);
+  const { data, error, loading, refresh, lastUpdated } = usePolling(load, 30000, valid);
   const ready = data?.deadline_samples ?? 0;
   return (
     <section className="reports">
@@ -67,8 +223,7 @@ export function AnalyticsPanel({ endpoint, stores = [] }: { endpoint: string; st
               type="button"
               onClick={() => {
                 const today = moscowDate();
-                setTo(today);
-                setFrom(previousDate(today, n - 1));
+                dates(previousDate(today, n - 1), today);
               }}
             >
               {n === 1 ? 'Сегодня' : n + ' дней'}
@@ -77,13 +232,13 @@ export function AnalyticsPanel({ endpoint, stores = [] }: { endpoint: string; st
         </div>
         <label>
           С даты
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <input type="date" value={fromValue} onChange={(e) => dates(e.target.value, toValue)} />
         </label>
         <label>
           По дату
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          <input type="date" value={toValue} onChange={(e) => dates(fromValue, e.target.value)} />
         </label>
-        {stores.length > 0 && (
+        {!owner && stores.length > 0 && (
           <label>
             Точка
             <select value={store} onChange={(e) => setStore(e.target.value)}>
@@ -101,7 +256,7 @@ export function AnalyticsPanel({ endpoint, stores = [] }: { endpoint: string; st
         </button>
       </div>
       {!valid && <Notice>Выберите корректный период не более одного года.</Notice>}
-      {error && <Notice>{error}</Notice>}
+      <RefreshStatus error={error} lastUpdated={lastUpdated} refresh={refresh} />
       {loading && !data && <Loading />}
       {data && valid && (
         <>
@@ -161,45 +316,7 @@ export function AnalyticsPanel({ endpoint, stores = [] }: { endpoint: string; st
               <p>За этот период заказов нет.</p>
             ) : (
               <>
-                <svg
-                  className="order-chart"
-                  viewBox="0 0 600 160"
-                  role="img"
-                  aria-label={'Количество заказов по дням с ' + from + ' по ' + to}
-                >
-                  <path
-                    d={data.daily
-                      .map((d, i) => {
-                        const span = Math.max(1, (Date.parse(to) - Date.parse(from)) / 86400000);
-                        const x =
-                          20 + ((Date.parse(d.date) - Date.parse(from)) / 86400000 / span) * 560;
-                        const y =
-                          140 - (d.orders / Math.max(1, ...data.daily.map((v) => v.orders))) * 120;
-                        return (i ? 'L' : 'M') + x + ',' + y;
-                      })
-                      .join(' ')}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                  />
-                  {data.daily.map((d) => {
-                    const span = Math.max(1, (Date.parse(to) - Date.parse(from)) / 86400000);
-                    return (
-                      <circle
-                        key={d.date}
-                        cx={20 + ((Date.parse(d.date) - Date.parse(from)) / 86400000 / span) * 560}
-                        cy={
-                          140 - (d.orders / Math.max(1, ...data.daily.map((v) => v.orders))) * 120
-                        }
-                        r="4"
-                      >
-                        <title>
-                          {d.date}: {d.orders} заказов
-                        </title>
-                      </circle>
-                    );
-                  })}
-                </svg>
+                <DailyChart daily={data.daily} from={fromValue} to={toValue} />
                 <div className="table-scroll">
                   <table>
                     <thead>
@@ -210,7 +327,7 @@ export function AnalyticsPanel({ endpoint, stores = [] }: { endpoint: string; st
                       </tr>
                     </thead>
                     <tbody>
-                      {data.daily.map((d) => (
+                      {dailySeries(data.daily, fromValue, toValue).map((d) => (
                         <tr key={d.date}>
                           <td>{d.date.split('-').reverse().join('.')}</td>
                           <td>{d.orders}</td>
@@ -296,49 +413,71 @@ export function HistoryPanel({
   endpoint,
   initialStatus = '',
   compact = false,
+  storeId = '',
+  hideHeading = false,
+  owner = false,
 }: {
   endpoint: string;
   initialStatus?: string;
   compact?: boolean;
+  storeId?: string;
+  hideHeading?: boolean;
+  owner?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [status, setStatus] = useState(initialStatus),
-    [before, setBefore] = useState<number | null>(null),
+  const [params, setParams] = useSearchParams();
+  const [localStatus, setStatus] = useState(initialStatus),
+    [localBefore, setBefore] = useState<number | null>(null),
     [older, setOlder] = useState<Order[]>([]);
+  const status = owner ? (params.get('status') ?? '') : localStatus;
+  const before = owner ? params.get('before') : localBefore;
   const load = useCallback(
     (signal: AbortSignal) =>
       api<Order[]>(
         endpoint +
           '?' +
-          new URLSearchParams({ status, ...(before ? { before: String(before) } : {}) }),
+          new URLSearchParams({
+            status,
+            ...(before ? { before: String(before) } : {}),
+            ...(storeId ? { store_id: storeId } : {}),
+          }),
         { signal },
       ),
-    [endpoint, status, before],
+    [endpoint, status, before, storeId],
   );
   const q = usePolling(load, 15000);
   const change = (next: string) => {
+    if (owner) {
+      const p = new URLSearchParams(params);
+      p.set('status', next);
+      p.delete('before');
+      setParams(p);
+      return;
+    }
     setStatus(next);
     setBefore(null);
     setOlder([]);
   };
-  const values = [...older, ...(q.data ?? [])];
+  const values = [...(owner ? [] : older), ...(q.data ?? [])];
   return (
     <section>
-      <h2>История заказов</h2>
-      <label>
-        Статус
-        <select value={status} onChange={(e) => change(e.target.value)}>
-          <option value="">Все</option>
-          {Object.entries(statusLabels).map(([k, label]) => (
-            <option key={k} value={k}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {q.error && <Notice>{q.error}</Notice>}
+      {!hideHeading && <h2>История заказов</h2>}
+      {!compact && (
+        <label>
+          Статус
+          <select value={status} onChange={(e) => change(e.target.value)}>
+            <option value="">Все</option>
+            {Object.entries(statusLabels).map(([k, label]) => (
+              <option key={k} value={k}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <RefreshStatus error={q.error} lastUpdated={q.lastUpdated} refresh={q.refresh} />
+      {q.loading && !q.data && <Loading />}
       <div className="history-list">
-        {(compact && !expanded ? values.slice(0, 5) : values).map((o) => (
+        {(compact ? values.slice(0, 5) : values).map((o) => (
           <article className="panel" key={o.id}>
             <div className="section-top">
               <strong>№{o.number}</strong>
@@ -361,15 +500,16 @@ export function HistoryPanel({
           </article>
         ))}
       </div>
-      {compact && !expanded && values.length > 5 && (
-        <button className="button secondary" onClick={() => setExpanded(true)}>
-          Показать ещё заказы ({values.length})
-        </button>
-      )}
-      {(!compact || expanded) && q.data?.length === 100 && (
+      {!compact && q.data?.length === 100 && (
         <button
           className="button secondary"
           onClick={() => {
+            if (owner) {
+              const p = new URLSearchParams(params);
+              p.set('before', String(q.data![q.data!.length - 1].id!));
+              setParams(p);
+              return;
+            }
             setOlder(values);
             setBefore(q.data![q.data!.length - 1].id!);
           }}
@@ -391,6 +531,14 @@ interface Event {
   created_at: string;
 }
 const actionLabels: Record<string, string> = {
+  'privacy.publish': 'Публикация документов',
+  'privacy.retention': 'Настройка сроков хранения',
+  'privacy.request.verify': 'Проверка принадлежности данных',
+  'privacy.request.export': 'Выгрузка по обращению',
+  'privacy.request.correct': 'Исправление данных',
+  'privacy.request.erase': 'Удаление необязательных полей',
+  'privacy.request.block': 'Блокировка спорных полей',
+  'privacy.request.resolve': 'Завершение обращения',
   'order.update': 'Изменение заказа',
   'store.operations': 'Работа точки',
   'store.status': 'Статус точки',
@@ -408,37 +556,54 @@ export function ActivityPanel({
   endpoint,
   stores = [],
   compact = false,
+  storeId = '',
+  hideHeading = false,
+  owner = false,
 }: {
   endpoint: string;
   stores?: Store[];
   compact?: boolean;
+  storeId?: string;
+  hideHeading?: boolean;
+  owner?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [before, setBefore] = useState<number | null>(null),
+  const [params, setParams] = useSearchParams();
+  const [localBefore, setBefore] = useState<number | null>(null),
     [older, setOlder] = useState<Event[]>([]);
+  const before = owner ? params.get('before') : localBefore;
   const load = useCallback(
     (signal: AbortSignal) =>
-      api<Event[]>(endpoint + (before ? '?before=' + before : ''), { signal }),
-    [endpoint, before],
+      api<Event[]>(
+        endpoint +
+          '?' +
+          new URLSearchParams({
+            ...(before ? { before: String(before) } : {}),
+            ...(storeId ? { store_id: storeId } : {}),
+          }),
+        { signal },
+      ),
+    [endpoint, before, storeId],
   );
   const q = usePolling(load, 15000);
-  const events = [...older, ...(q.data ?? [])];
+  const events = [...(owner ? [] : older), ...(q.data ?? [])];
   return (
     <section>
-      <h2>Действия сотрудников</h2>
-      {q.error && <Notice>{q.error}</Notice>}
+      {!hideHeading && <h2>Действия сотрудников</h2>}
+      <RefreshStatus error={q.error} lastUpdated={q.lastUpdated} refresh={q.refresh} />
+      {q.loading && !q.data && <Loading />}
       <div className="activity-list">
-        {(compact && !expanded ? events.slice(0, 10) : events).map((e) => (
+        {(compact ? events.slice(0, 5) : events).map((e) => (
           <article className="activity-row" key={e.id}>
             <div>
               <strong>{actionLabels[e.action] ?? e.action}</strong>
               <small>
                 {e.actor} ·{' '}
                 {new Date(e.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}
-                {e.store_id &&
-                  ' · ' +
+                {e.store_id
+                  ? ' · ' +
                     (stores.find((s) => s.id === e.store_id)?.settings.address ??
-                      'Точка ' + e.store_id)}
+                      'Точка ' + e.store_id)
+                  : ' · Для всего бизнеса'}
               </small>
             </div>
             <p>
@@ -456,15 +621,16 @@ export function ActivityPanel({
           </article>
         ))}
       </div>
-      {compact && !expanded && events.length > 10 && (
-        <button className="button secondary" onClick={() => setExpanded(true)}>
-          Показать ещё действия ({events.length})
-        </button>
-      )}
-      {(!compact || expanded) && q.data?.length === 100 && (
+      {!compact && q.data?.length === 100 && (
         <button
           className="button secondary"
           onClick={() => {
+            if (owner) {
+              const p = new URLSearchParams(params);
+              p.set('before', String(q.data![q.data!.length - 1].id));
+              setParams(p);
+              return;
+            }
             setOlder(events);
             setBefore(q.data![q.data!.length - 1].id);
           }}

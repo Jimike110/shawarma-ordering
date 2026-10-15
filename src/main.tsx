@@ -1,6 +1,11 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import {
+  createBrowserRouter,
+  createRoutesFromElements,
+  Route,
+  RouterProvider,
+} from 'react-router-dom';
 import { Shop } from './pages/Shop';
 import { Orders } from './pages/Orders';
 import { Checkout } from './pages/Checkout';
@@ -19,50 +24,59 @@ import {
 import { Owner } from './pages/Owner';
 import { Privacy } from './pages/Privacy';
 import { OwnerPrivacy } from './pages/OwnerPrivacy';
+import { OwnerLayout } from './ownerWorkspace';
 import './styles.css';
-createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <Routes>
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/consent" element={<Privacy consent />} />
-        <Route element={<PickupStoresProvider />}>
-          <Route path="/" element={<StorePicker />} />
-          <Route path="/s/:slug" element={<CustomerScope />}>
-            <Route index element={<Shop />} />
-            <Route path="checkout" element={<Checkout />} />
-          </Route>
-          <Route element={<CustomerScope neutral />}>
-            <Route path="/orders" element={<Orders />} />
-            <Route path="/track" element={<Tracking />} />
-          </Route>
-          <Route element={<CustomerScope />}>
-            <Route path="/checkout" element={<Checkout />} />
-          </Route>
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <>
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/consent" element={<Privacy consent />} />
+      <Route element={<PickupStoresProvider />}>
+        <Route path="/" element={<StorePicker />} />
+        <Route path="/s/:slug" element={<CustomerScope />}>
+          <Route index element={<Shop />} />
+          <Route path="checkout" element={<Checkout />} />
         </Route>
-        <Route element={<StaffAuth />}>
-          <Route element={<StaffGate />}>
-            <Route path="/kitchen" element={<StaffHome />} />
-            <Route path="/staff/choose" element={<StaffStorePicker />} />
-            <Route path="/staff/account" element={<PasswordForm />} />
-            <Route path="/staff/stores/:storeId" element={<StoreWorkspace />} />
-            <Route path="/staff/stores/:storeId/reports" element={<StoreWorkspace reports />} />
-            <Route element={<OwnerGate />}>
+        <Route element={<CustomerScope neutral />}>
+          <Route path="/orders" element={<Orders />} />
+          <Route path="/track" element={<Tracking />} />
+        </Route>
+        <Route element={<CustomerScope />}>
+          <Route path="/checkout" element={<Checkout />} />
+        </Route>
+      </Route>
+      <Route element={<StaffAuth />}>
+        <Route element={<StaffGate />}>
+          <Route path="/kitchen" element={<StaffHome />} />
+          <Route path="/staff/choose" element={<StaffStorePicker />} />
+          <Route path="/staff/account" element={<PasswordForm />} />
+          <Route path="/staff/stores/:storeId" element={<StoreWorkspace />} />
+          <Route path="/staff/stores/:storeId/reports" element={<StoreWorkspace reports />} />
+          <Route element={<OwnerGate />}>
+            <Route element={<OwnerLayout />}>
               <Route path="/owner" element={<Owner />} />
+              <Route path="/owner/stores" element={<Owner section="stores" />} />
+              <Route path="/owner/staff" element={<Owner section="staff" />} />
+              <Route path="/owner/analytics" element={<Owner section="analytics" />} />
               <Route path="/owner/privacy" element={<OwnerPrivacy />} />
             </Route>
           </Route>
         </Route>
-        <Route
-          path="*"
-          element={
-            <main className="container empty">
-              <h1>Страница не найдена</h1>
-              <a href="/">Вернуться в меню</a>
-            </main>
-          }
-        />
-      </Routes>
-    </BrowserRouter>
+      </Route>
+      <Route
+        path="*"
+        element={
+          <main className="container empty">
+            <h1>Страница не найдена</h1>
+            <a href="/">Вернуться в меню</a>
+          </main>
+        }
+      />
+    </>,
+  ),
+);
+createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <RouterProvider router={router} />
   </React.StrictMode>,
 );

@@ -20,6 +20,10 @@ All routes use `/api`. JSON requests require `Content-Type: application/json`. R
 
 Legacy `/kitchen/*` aliases remain bound to store 1 and enforce the same current permissions. Products/settings writes require manager/owner; workers use narrow `PATCH .../products/{id}/availability` and `PATCH .../operations` payloads. Every resource lookup includes its store constraint. Manager-only store suffixes include `history`, `analytics` and `activity`. Owner endpoints include `stores`, `users`, `users/{id}/reset-password`, `menu-copy`, `orders`, `analytics` and `activity`.
 
+Owner `orders`, `activity` and `analytics` accept an optional positive `store_id`; unknown stores return 404 and malformed IDs return 400. Filtering happens before cursor pagination (`before` on orders/activity). Staff-scoped report routes always retain the authorized path store, ignoring attempts to override it through query parameters.
+
+Store objects include `intake_blockers`, an array of independent codes: `archived`, `unpublished`, `privacy_unpublished`, `owner_stopped`, `paused`, `outside_hours`. Several may apply at once. Existing `accepting_orders` and `intake_message` remain authoritative compatibility fields; explanations do not change intake enforcement.
+
 ## Menu and products
 
 `GET /menu` returns `products`, `settings`, `accepting_orders`, `intake_message`, and `estimated_minutes`. The server evaluates the opening schedule and manual pause, and estimates preparation time from the configured base and active queue, capped at 120 minutes. Use the server intake fields rather than independently interpreting local browser time.

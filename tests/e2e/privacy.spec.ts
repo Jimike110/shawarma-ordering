@@ -95,7 +95,7 @@ test('owner handles a verified withdrawal without cancelling the order', async (
       });
     } else await route.continue();
   });
-  await page.goto('/owner/privacy');
+  await page.goto('/owner/privacy?section=requests');
   await page.getByLabel('Точка получения').selectOption('1');
   await page.getByLabel('Номер заказа', { exact: true }).fill(String(order.number));
   await page.getByLabel('Вид обращения').selectOption('withdrawal');

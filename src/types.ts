@@ -45,6 +45,7 @@ export interface Menu {
   store?: Store;
 }
 export interface Store {
+  intake_blockers?: IntakeBlocker[];
   id: number;
   slug: string;
   published: boolean;
@@ -57,6 +58,8 @@ export interface Store {
   intake_message: string;
   counts?: Record<string, number>;
 }
+export type IntakeBlocker =
+  'archived' | 'unpublished' | 'privacy_unpublished' | 'owner_stopped' | 'paused' | 'outside_hours';
 export interface StaffAccount {
   id: number;
   username: string;

@@ -25,7 +25,7 @@ test('owner workspace and account management fit phones and desktop', async ({ p
     await fits(page);
     await page.screenshot({ path: 'artifacts/access/owner-' + width + '.png', fullPage: false });
   }
-  await page.getByRole('button', { name: 'Сотрудники', exact: true }).click();
+  await page.getByRole('link', { name: 'Сотрудники', exact: true }).click();
   await page.getByRole('button', { name: 'Добавить сотрудника', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Новый сотрудник' });
   await expect(dialog).toBeVisible();
@@ -36,8 +36,8 @@ test('owner workspace and account management fit phones and desktop', async ({ p
   await expect(dialog).not.toBeVisible();
   await expect(page.getByRole('heading', { name: 'Временный пароль', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Я сохранил пароль' }).click();
-  await page.getByRole('button', { name: 'Аналитика', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Аналитика заказов' })).toBeVisible();
+  await page.getByRole('link', { name: 'Аналитика', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Аналитика', exact: true })).toBeVisible();
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: width > 720 ? 1000 : 844 });
     await fits(page);
@@ -54,10 +54,11 @@ test('owner changes their own password without self-resetting or losing the new 
 }) => {
   await page.context().addCookies((await request.storageState()).cookies);
   await page.goto('/owner');
-  await page.getByRole('button', { name: 'Сотрудники', exact: true }).click();
+  await page.getByRole('link', { name: 'Сотрудники', exact: true }).click();
   const self = page
     .locator('.staff-user')
-    .filter({ has: page.getByRole('heading', { name: 'TestOwner', exact: true }) });
+    .filter({ has: page.getByRole('heading', { name: /TestOwner/ }) });
+  await self.locator('summary').click();
   await expect(self.getByRole('button', { name: 'Выдать новый пароль', exact: true })).toHaveCount(
     0,
   );
@@ -89,6 +90,7 @@ test('owner changes their own password without self-resetting or losing the new 
         data: { current_password: newPassword, password: oldPassword },
       });
       expect(restore.ok()).toBe(true);
+      await page.locator('.owner-account summary').click();
       await page.getByRole('button', { name: 'Выйти', exact: true }).click();
       await page.getByLabel('Логин', { exact: true }).fill('owner');
       await page.getByLabel('Пароль', { exact: true }).fill(oldPassword);

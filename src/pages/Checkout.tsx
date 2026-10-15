@@ -155,7 +155,6 @@ export function Checkout() {
               <span className="section-number">1</span> Получение
             </h2>
             <div className="fulfilment-choice">
-              <MapPin size={20} />
               <span>
                 <b>Самовывоз</b>
                 <small>Заберёте из нашего заведения</small>
@@ -197,9 +196,6 @@ export function Checkout() {
                 disabled={busy || !!pending}
               />
             </label>
-            <p className="fine-print">
-              Достаточно номера заказа. Имя и комментарий можно оставить пустыми.
-            </p>
             <p className="fine-print">
               В комментарии — только пожелания к приготовлению. Не указывайте сведения о здоровье,
               платёжные данные и данные других людей.

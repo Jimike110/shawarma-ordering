@@ -75,5 +75,13 @@ export function usePolling<T>(
       window.removeEventListener('online', online);
     };
   }, [load, interval, enabled, version, isComplete]);
-  return { data, error, loading, lastUpdated, refresh };
+  // A scope change must hide the old result in the same render, before effects run.
+  const current = previousLoad.current === load;
+  return {
+    data: current ? data : null,
+    error: current ? error : '',
+    loading: current ? loading : true,
+    lastUpdated: current ? lastUpdated : null,
+    refresh,
+  };
 }
