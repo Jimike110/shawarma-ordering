@@ -95,11 +95,17 @@ func (s *Store) PrivacyMaintenance(ctx context.Context, batch int) (int, error) 
 	}
 	defer tx.Rollback()
 	var locked bool
-	if e = tx.QueryRowContext(ctx, "SELECT pg_try_advisory_xact_lock(184020)").Scan(&locked); e != nil {
+	// A separate singleton lock rejects competing maintenance runs. Checkout holds
+	// a shared replay lock, so ordinary orders must make cleanup wait, not falsely
+	// report that another maintenance worker is already running.
+	if e = tx.QueryRowContext(ctx, "SELECT pg_try_advisory_xact_lock(184021)").Scan(&locked); e != nil {
 		return 0, e
 	}
 	if !locked {
 		return 0, errors.New("privacy maintenance already running")
+	}
+	if _, e = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(184020)"); e != nil {
+		return 0, e
 	}
 	var enabled bool
 	if e = tx.QueryRowContext(ctx, "SELECT retention_enabled FROM privacy_settings WHERE id=1 FOR SHARE").Scan(&enabled); e != nil {

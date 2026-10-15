@@ -238,11 +238,15 @@ test('privacy drafts warn on navigation and remain distinct from published docum
   const saved = await input.inputValue();
   await input.fill('Несохранённый оператор');
   await expect(page.getByText('Есть несохранённые изменения', { exact: true })).toBeVisible();
-  page.once('dialog', (d) => d.dismiss());
-  await page.getByRole('link', { name: 'Сотрудники', exact: true }).click();
+  await Promise.all([
+    page.waitForEvent('dialog').then((dialog) => dialog.dismiss()),
+    page.getByRole('link', { name: 'Сотрудники', exact: true }).click(),
+  ]);
   await expect(input).toHaveValue('Несохранённый оператор');
-  page.once('dialog', (d) => d.accept());
-  await page.getByRole('button', { name: 'Обращения', exact: true }).click();
+  await Promise.all([
+    page.waitForEvent('dialog').then((dialog) => dialog.accept()),
+    page.getByRole('button', { name: 'Обращения', exact: true }).click(),
+  ]);
   await expect(page).toHaveURL(/section=requests/);
   await page.getByRole('button', { name: 'Документы', exact: true }).click();
   await expect(input).toHaveValue(saved);
