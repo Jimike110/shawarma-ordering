@@ -87,7 +87,7 @@ func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.A
 	defer cancel()
 	h, e := load(ctx)
 	if e != nil {
-		log.Printf("Function init: %v", e)
+		log.Printf("Function init failed (%T)", e)
 		return events.APIGatewayProxyResponse{StatusCode: 503, Headers: map[string]string{"Content-Type": "application/json", "Cache-Control": "no-store"}, Body: fmt.Sprintf("{\"error\":%q}", "Сервис временно недоступен.")}, nil
 	}
 	return proxy(ctx, event, h)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from './api';
+import { api, ApiError } from './api';
 import { ORDER_HISTORY_CHANGED, savedOrders, saveOrder } from './orderHistory';
 import type { Order } from './types';
 
@@ -16,7 +16,12 @@ export function useSavedOrders({ recoverMetadata = true }: { recoverMetadata?: b
         // Sequential requests avoid flooding the API when migrating a large history.
         for (;;) {
           const missing = savedOrders().find(
-            (order) => (!order.number || !order.created_at) && !attempted.has(order.token),
+            (order) =>
+              !order.expired &&
+              (!order.number ||
+                !order.created_at ||
+                Date.parse(order.created_at) < Date.now() - 365 * 86400000) &&
+              !attempted.has(order.token),
           );
           if (!missing || controller.signal.aborted) break;
           attempted.add(missing.token);
@@ -33,7 +38,9 @@ export function useSavedOrders({ recoverMetadata = true }: { recoverMetadata?: b
                 number: order.number,
                 created_at: order.created_at,
               });
-          } catch {
+          } catch (e) {
+            if (!controller.signal.aborted && e instanceof ApiError && e.status === 410)
+              saveOrder({ token: missing.token, expired: true });
             /* Keep the personal link on network errors or unavailable orders. */
           }
         }

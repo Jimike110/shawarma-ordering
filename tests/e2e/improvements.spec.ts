@@ -37,6 +37,7 @@ test('lost checkout response and rate-limited retry preserve one exact order acr
   await page.getByRole('button', { name: 'Оформить заказ' }).click();
   const name = 'Повтор ' + Date.now();
   await page.getByLabel('Ваше имя').fill(name);
+  await page.getByRole('checkbox', { name: /Даю отдельное/ }).check();
   const payloads: string[] = [];
   let attempt = 0;
   await page.route(/\/api\/orders$/, async (route) => {
@@ -111,6 +112,7 @@ test('customizations have independent quantities, correct totals, and historic r
     await expect(page.locator('.cart-dialog[open] .cart-summary')).toContainText('630');
     await page.getByRole('button', { name: 'Оформить заказ' }).click();
     await page.getByLabel('Ваше имя').fill('Опции ' + Date.now());
+    await page.getByRole('checkbox', { name: /Даю отдельное/ }).check();
     await page.getByRole('button', { name: /Заказать ·/ }).click();
     await expect(page).toHaveURL(/\/track#/);
     const token = page.url().split('#')[1];
@@ -166,6 +168,7 @@ test('schedule and pause block additions but allow removing existing items', asy
       data: {
         name: 'Closed',
         note: '',
+        privacy: { notice_version: 1, consent_version: 1, accepted: true },
         request_key: 'schedule-test-key-with-at-least-32-chars',
         items: [{ product_id: 1, quantity: 1, expected_price: 290 }],
       },
@@ -260,6 +263,7 @@ test('staff edit shop information and options; kitchen shows new and overdue ord
       data: {
         name: 'Кухня тест',
         note: 'Проверка уведомления',
+        privacy: { notice_version: 1, consent_version: 1, accepted: true },
         request_key: 'kitchen-notice-test-' + Date.now() + '-unique',
         items: [{ product_id: 1, quantity: 1, expected_price: 290 }],
       },

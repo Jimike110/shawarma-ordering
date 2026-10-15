@@ -22,7 +22,7 @@ const userInput = (u: StaffAccount): UserInput => ({
   memberships: u.memberships,
 });
 type Action = (path: string, options: RequestInit, done?: (result: any) => void) => Promise<void>;
-function Modal({
+export function Modal({
   title,
   children,
   close,
@@ -191,6 +191,11 @@ export function Owner() {
       )}
       {tab === 'overview' && (
         <>
+          <p>
+            <Link to="/owner/privacy" className="text-link">
+              Персональные данные · документы и обращения
+            </Link>
+          </p>
           <h2>Состояние точек</h2>
           <div className="store-list">
             {published.map((s) => (

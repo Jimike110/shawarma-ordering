@@ -58,6 +58,7 @@ test('local Cyrillic font, product quantity builder, and checkout fit every scre
     await page.getByRole('button', { name: 'Открыть корзину' }).click();
     await page.getByRole('button', { name: 'Оформить заказ' }).click();
     await page.getByLabel('Ваше имя').fill('Гость');
+    await page.getByRole('checkbox', { name: /Даю отдельное/ }).check();
     for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: width > 720 ? 1000 : 844 });
       await fits(page);
@@ -88,6 +89,7 @@ test('mobile kitchen shortcuts persist ETA, availability, and weekly settings', 
       data: {
         name: 'Быстрые действия',
         note: '',
+        privacy: { notice_version: 1, consent_version: 1, accepted: true },
         request_key: 'mobile-design-test-' + Date.now() + '-unique-key',
         items: [{ product_id: original.id, quantity: 1, expected_price: original.price }],
       },

@@ -74,6 +74,8 @@ export function Layout({ neutral = false }: { neutral?: boolean }) {
         <Outlet />
       </div>
       <footer className="footer container">
+        <Link to="/privacy">Политика обработки данных</Link>
+        <Link to="/consent">Отдельное согласие</Link>
         <span>{data?.settings.shop_name || 'Шаверма на районе'} · Самовывоз</span>
         {!neutral && (
           <span>{[data?.settings.address, data?.settings.city].filter(Boolean).join(' · ')}</span>

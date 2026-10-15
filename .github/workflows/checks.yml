@@ -51,6 +51,7 @@ jobs:
       AUTO_MIGRATE: 'true'
       E2E_KITCHEN_PASSWORD: ci-only-kitchen-password
       E2E_STAFF_USERNAME: owner
+      PRIVACY_JOURNAL_PATH: /tmp/shawarma-ci-journal.jsonl
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

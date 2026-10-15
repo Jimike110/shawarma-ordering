@@ -16,6 +16,7 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
   await page.getByRole('button', { name: 'Оформить заказ' }).click();
   await page.getByLabel('Ваше имя').fill('Тестовый гость');
   await page.getByLabel('Комментарий к заказу').fill('Без лука');
+  await page.getByRole('checkbox', { name: /Даю отдельное/ }).check();
   await page.getByRole('button', { name: /Заказать ·/ }).click();
   await expect(page).toHaveURL(/\/track#/);
   const trackURL = page.url();

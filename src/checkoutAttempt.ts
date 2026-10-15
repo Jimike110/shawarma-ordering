@@ -1,5 +1,6 @@
 import { json } from './api';
 import type { Settings } from './types';
+import type { PrivacyChoice } from './privacy';
 export interface Attempt {
   key: string;
   shop?: Settings;
@@ -9,6 +10,7 @@ export interface Attempt {
     store_id?: number;
     name: string;
     note: string;
+    privacy?: PrivacyChoice;
     items: { product_id: number; quantity: number; expected_price: number; options?: string[] }[];
   };
 }

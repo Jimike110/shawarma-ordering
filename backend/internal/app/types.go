@@ -55,11 +55,12 @@ type CartItem struct {
 	Options       []string `json:"options,omitempty"`
 }
 type Checkout struct {
-	Name       string     `json:"name"`
-	Note       string     `json:"note"`
-	RequestKey string     `json:"request_key"`
-	Items      []CartItem `json:"items"`
-	StoreID    int64      `json:"store_id,omitempty"`
+	Name       string         `json:"name"`
+	Note       string         `json:"note"`
+	RequestKey string         `json:"request_key"`
+	Items      []CartItem     `json:"items"`
+	StoreID    int64          `json:"store_id,omitempty"`
+	Privacy    *PrivacyChoice `json:"privacy,omitempty"`
 }
 type OrderItem struct {
 	ProductID int64           `json:"product_id"`

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Check, CheckCheck, Clock3, CookingPot, Copy, RefreshCw, X } from 'lucide-react';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { saveOrder } from '../orderHistory';
 import { usePolling } from '../usePolling';
 import { Loading, Notice } from '../ui';
@@ -14,9 +14,19 @@ export function Tracking() {
   const { data: menu } = useMenu();
   const location = useLocation();
   const token = location.hash.slice(1);
+  const [expiredToken, setExpiredToken] = useState<string | null>(null);
   const load = useCallback(
     async (signal: AbortSignal) => {
-      const order = await api<Order>('/orders/' + encodeURIComponent(token), { signal });
+      let order: Order;
+      try {
+        order = await api<Order>('/orders/' + encodeURIComponent(token), { signal });
+      } catch (e) {
+        if (!signal.aborted && e instanceof ApiError && e.status === 410) {
+          saveOrder({ token, expired: true });
+          setExpiredToken(token);
+        }
+        throw e;
+      }
       if (!signal.aborted) saveOrder({ token, number: order.number, created_at: order.created_at });
       return order;
     },
@@ -28,9 +38,23 @@ export function Tracking() {
     loading,
     lastUpdated,
     refresh,
-  } = usePolling(load, 5000, token.length === 43, isComplete);
+  } = usePolling(load, 5000, token.length === 43 && expiredToken !== token, isComplete);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState('');
+  if (expiredToken === token)
+    return (
+      <main className="container empty">
+        <h1>Срок хранения квитанции истёк</h1>
+        <p>
+          Индивидуальные данные заказа удалены. Ссылка остаётся в истории этого браузера с отметкой
+          об истечении.
+        </p>
+        <Link className="button" to="/orders">
+          Мои заказы
+        </Link>
+        <Link to="/privacy">Сроки обработки данных</Link>
+      </main>
+    );
   if (token.length !== 43)
     return (
       <main className="container empty">

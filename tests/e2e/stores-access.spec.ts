@@ -15,6 +15,7 @@ async function fits(page: Page) {
 }
 
 test('owner workspace and account management fit phones and desktop', async ({ page, request }) => {
+  await confirm(request);
   await page.context().addCookies((await request.storageState()).cookies);
   await page.goto('/owner');
   await expect(page.getByRole('heading', { name: 'Управление бизнесом' })).toBeVisible();
@@ -124,6 +125,7 @@ test('worker changes temporary password, runs a shift, and cannot lift an owner 
     store_id: 1,
     name: 'Проверка сотрудника',
     note: '',
+    privacy: { notice_version: 1, consent_version: 1, accepted: true },
     request_key: 'worker-' + Date.now().toString().padEnd(32, '0'),
     items: [{ product_id: p.id, quantity: 1, expected_price: p.price }],
   });
@@ -256,6 +258,7 @@ test('separate store baskets, independent menu copies and cross-store checkout r
     await page.getByRole('button', { name: 'Оформить заказ' }).click();
     await expect(page).toHaveURL(/\/s\/second-e2e\/checkout$/);
     await page.getByLabel('Ваше имя').fill('Гость второй точки');
+    await page.getByRole('checkbox', { name: /Даю отдельное/ }).check();
     const payloads: string[] = [];
     let attempts = 0;
     await page.route(/\/api\/orders$/, async (route) => {

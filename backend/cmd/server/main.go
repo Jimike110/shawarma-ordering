@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"shawarma/internal/app"
-	"strconv"
 	"syscall"
 	"time"
 )
@@ -15,25 +14,21 @@ import (
 func main() {
 	config, e := app.LoadConfig()
 	if e != nil {
-		log.Fatal(e)
+		log.Fatalf("configuration unavailable (%T)", e)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	store, e := app.Open(ctx, os.Getenv("DATABASE_URL"))
 	if e != nil {
-		log.Fatal(e)
+		log.Fatalf("database unavailable (%T)", e)
 	}
 	defer store.DB.Close()
-	retention := 0
-	if raw := os.Getenv("ORDER_RETENTION_DAYS"); raw != "" {
-		retention, e = strconv.Atoi(raw)
-		if e != nil || (retention != 0 && (retention < 30 || retention > 3650)) {
-			log.Fatal("ORDER_RETENTION_DAYS must be 0 (disabled), or 30 to 3650")
-		}
+	if raw := os.Getenv("ORDER_RETENTION_DAYS"); raw != "" && raw != "0" {
+		log.Fatal("ORDER_RETENTION_DAYS deletion is retired; configure reviewed privacy retention and the maintenance CLI")
 	}
 	if os.Getenv("AUTO_MIGRATE") == "true" {
 		if e = store.Migrate(ctx); e != nil {
-			log.Fatal(e)
+			log.Fatalf("migration failed (%T)", e)
 		}
 	}
 	addr := os.Getenv("LISTEN_ADDR")
@@ -47,12 +42,12 @@ func main() {
 	maintenanceDone := make(chan struct{})
 	go func() {
 		defer close(maintenanceDone)
-		ticker := time.NewTicker(24 * time.Hour)
+		ticker := time.NewTicker(time.Hour)
 		defer ticker.Stop()
 		for {
 			job, finish := context.WithTimeout(maintenanceContext, 30*time.Second)
-			if err := store.Maintenance(job, retention); err != nil && maintenanceContext.Err() == nil {
-				log.Printf("database maintenance failed: %v", err)
+			if err := store.Maintenance(job, 0); err != nil && maintenanceContext.Err() == nil {
+				log.Printf("security maintenance failed (%T)", err)
 			}
 			finish()
 			select {

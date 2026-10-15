@@ -9,3 +9,5 @@ playwright-report
 test-results
 artifacts
 backups
+privacy-journal
+**/deletions.jsonl

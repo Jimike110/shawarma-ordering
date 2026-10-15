@@ -17,11 +17,15 @@ import {
   PasswordForm,
 } from './staff';
 import { Owner } from './pages/Owner';
+import { Privacy } from './pages/Privacy';
+import { OwnerPrivacy } from './pages/OwnerPrivacy';
 import './styles.css';
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/consent" element={<Privacy consent />} />
         <Route element={<PickupStoresProvider />}>
           <Route path="/" element={<StorePicker />} />
           <Route path="/s/:slug" element={<CustomerScope />}>
@@ -45,6 +49,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/staff/stores/:storeId/reports" element={<StoreWorkspace reports />} />
             <Route element={<OwnerGate />}>
               <Route path="/owner" element={<Owner />} />
+              <Route path="/owner/privacy" element={<OwnerPrivacy />} />
             </Route>
           </Route>
         </Route>

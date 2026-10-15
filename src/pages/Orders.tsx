@@ -28,6 +28,7 @@ export function Orders() {
                 <span>
                   <b>{order.number ? 'Заказ №' + order.number : 'Заказ по личной ссылке'}</b>
                   <small>
+                    {order.expired && 'Срок хранения квитанции истёк · '}
                     {order.created_at
                       ? new Date(order.created_at).toLocaleString('ru-RU', {
                           timeZone: 'Europe/Moscow',

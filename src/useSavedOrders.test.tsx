@@ -1,10 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from './api';
+import { api, ApiError } from './api';
 import { savedOrders, saveOrder } from './orderHistory';
 import { useSavedOrders } from './useSavedOrders';
 
-vi.mock('./api', () => ({ api: vi.fn() }));
+vi.mock('./api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./api')>()),
+  api: vi.fn(),
+}));
 const token = 'a'.repeat(43);
 const created_at = '2026-10-01T08:00:00Z';
 beforeEach(() => {
@@ -13,6 +16,16 @@ beforeEach(() => {
 });
 
 describe('recovering saved order numbers', () => {
+  it('retains metadata and labels an expired receipt without retrying it on mount', async () => {
+    saveOrder({ token, number: 101, created_at: '2020-01-01T00:00:00Z' });
+    vi.mocked(api).mockRejectedValue(new ApiError('Expired', 410));
+    const hook = renderHook(useSavedOrders);
+    await waitFor(() => expect(hook.result.current[0].expired).toBe(true));
+    expect(hook.result.current[0].number).toBe(101);
+    hook.unmount();
+    renderHook(useSavedOrders);
+    expect(api).toHaveBeenCalledTimes(1);
+  });
   it('keeps the home count reactive without fetching legacy order metadata', () => {
     localStorage.setItem('shawarma-last-order', token);
     const hook = renderHook(() => useSavedOrders({ recoverMetadata: false }));

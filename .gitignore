@@ -17,3 +17,5 @@ docs/
 scripts/pitch/
 /Dockerfile.pitch*
 /compose.pitch*.yaml
+privacy-journal/
+**/deletions.jsonl

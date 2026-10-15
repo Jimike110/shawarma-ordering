@@ -177,7 +177,7 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	username := NormalizeUsername(input.Username)
-	ok, e := a.Store.Allow(r.Context(), "login-user:"+Hash(username), 10)
+	ok, e := a.Store.Allow(r.Context(), "login-user:"+a.Store.privacyDigest("rate-username", username), 10)
 	if e != nil {
 		fail(w, e)
 		return
@@ -511,7 +511,7 @@ func (s *Store) SaveAccount(ctx context.Context, id int64, in UserInput, hash st
 			}
 		}
 	}
-	details, _ := json.Marshal(map[string]any{"username": in.Username, "owner": in.Owner, "active": in.Active, "memberships": in.Memberships})
+	details, _ := json.Marshal(map[string]any{"owner": in.Owner, "active": in.Active, "memberships": in.Memberships})
 	if e = auditDetails(ctx, tx, "account.save", fmt.Sprint(id), details); e != nil {
 		return Account{}, e
 	}

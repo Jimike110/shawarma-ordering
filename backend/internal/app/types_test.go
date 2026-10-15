@@ -6,7 +6,7 @@ import (
 )
 
 func checkout() Checkout {
-	return Checkout{Name: "Михаил", RequestKey: strings.Repeat("a", 36), Items: []CartItem{{ProductID: 1, Quantity: 2, ExpectedPrice: 290}}}
+	return Checkout{Privacy: &PrivacyChoice{NoticeVersion: 1, ConsentVersion: 1, Accepted: true}, Name: "Михаил", RequestKey: strings.Repeat("a", 36), Items: []CartItem{{ProductID: 1, Quantity: 2, ExpectedPrice: 290}}}
 }
 func TestCheckoutValidation(t *testing.T) {
 	cases := []struct {

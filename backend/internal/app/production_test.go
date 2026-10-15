@@ -190,8 +190,8 @@ func TestCancellationAndMaintenance(t *testing.T) {
 	if e = store.Maintenance(ctx, 30); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = store.Track(ctx, token); !errors.Is(e, ErrMissing) {
-		t.Fatal("configured retention did not remove old closed order")
+	if _, e = store.Track(ctx, token); e != nil {
+		t.Fatal("retired retention path deleted a receipt")
 	}
 }
 func TestMigrationsPreserveEditsAndAreVersioned(t *testing.T) {
@@ -210,7 +210,7 @@ func TestMigrationsPreserveEditsAndAreVersioned(t *testing.T) {
 	}
 	var count int
 	store.DB.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&count)
-	if count != 3 {
+	if count != 4 {
 		t.Fatalf("wrong migration count %d", count)
 	}
 }

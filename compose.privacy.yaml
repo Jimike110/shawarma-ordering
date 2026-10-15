@@ -1,0 +1,25 @@
+# Opt-in only. The journal directory is separate from database volumes and backup snapshots.
+# Prepare it for uid 10001, restrict access, and keep its SESSION_SECRET stable/off-repository.
+services:
+  api:
+    environment:
+      PRIVACY_JOURNAL_PATH: /privacy-journal/deletions.jsonl
+    volumes:
+      - type: bind
+        source: ${PRIVACY_JOURNAL_DIR:?Set an absolute separate journal directory}
+        target: /privacy-journal
+  privacy-maintenance:
+    profiles: [operations]
+    build: { context: ., dockerfile: backend/Dockerfile }
+    environment:
+      DATABASE_URL: postgres://shawarma:${POSTGRES_PASSWORD}@db:5432/shawarma?sslmode=disable
+      SESSION_SECRET: ${SESSION_SECRET:?Set the existing stable session secret}
+      PRIVACY_JOURNAL_PATH: /privacy-journal/deletions.jsonl
+    volumes:
+      - type: bind
+        source: ${PRIVACY_JOURNAL_DIR:?Set an absolute separate journal directory}
+        target: /privacy-journal
+    entrypoint: [privacy-maintenance]
+    command: [-mode, preview]
+    depends_on:
+      db: { condition: service_healthy }

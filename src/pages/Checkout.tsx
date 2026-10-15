@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useCallback, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Banknote, Check, Clock3, MapPin } from 'lucide-react';
 import { api, ApiError, errorMessage, json } from '../api';
@@ -9,6 +9,8 @@ import { randomKey } from '../requestKey';
 import { readAttempt, persist, type Attempt } from '../checkoutAttempt';
 import { saveOrder } from '../orderHistory';
 import { rub, type Order } from '../types';
+import { usePolling } from '../usePolling';
+import type { PrivacyDocument } from '../privacy';
 export function Checkout() {
   const { data: menu, error: menuError, loading, refresh } = useMenu();
   const { lines, clear } = useCart();
@@ -17,6 +19,23 @@ export function Checkout() {
   const [pending, setPending] = useState<Attempt | null>(() => readAttempt(storeId));
   const [name, setName] = useState(() => pending?.payload.name ?? '');
   const [note, setNote] = useState(() => pending?.payload.note ?? '');
+  const [acceptedVersion, setAcceptedVersion] = useState<number | null>(() =>
+    pending?.payload.privacy?.accepted ? pending.payload.privacy.consent_version : null,
+  );
+  const frozenNoticeVersion = pending?.payload.privacy?.notice_version;
+  const loadPrivacy = useCallback(
+    (signal: AbortSignal) =>
+      api<PrivacyDocument>(
+        frozenNoticeVersion ? '/privacy/versions/' + frozenNoticeVersion : '/privacy',
+        { signal },
+      ),
+    [frozenNoticeVersion],
+  );
+  const {
+    data: privacy,
+    error: privacyError,
+    refresh: refreshPrivacy,
+  } = usePolling(loadPrivacy, 30000);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
   const submitting = useRef(false),
@@ -50,6 +69,17 @@ export function Checkout() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (submitting.current || !menu || (!pending && (invalid || !accepting))) return;
+    if (
+      !pending &&
+      (!privacy || ((name.trim() || note.trim()) && acceptedVersion !== privacy.id))
+    ) {
+      setError(
+        privacy
+          ? 'Для имени и комментария отметьте отдельное согласие или оставьте поля пустыми.'
+          : 'Не удалось загрузить документы оператора. Обновите страницу.',
+      );
+      return;
+    }
     submitting.current = true;
     setBusy(true);
     setError('');
@@ -64,6 +94,11 @@ export function Checkout() {
         store_id: storeId,
         name: name.trim(),
         note: note.trim(),
+        privacy: {
+          notice_version: privacy!.id,
+          consent_version: acceptedVersion === privacy!.id ? privacy!.id : 0,
+          accepted: acceptedVersion === privacy!.id,
+        },
         items: lines.map((line) => ({
           ...line,
           expected_price: unitPrice(
@@ -89,10 +124,17 @@ export function Checkout() {
     } catch (e) {
       setError(errorMessage(e));
       // A definitive rejection is safe to edit; a lost response must reuse the exact payload.
-      if (e instanceof ApiError && (e.status === 400 || e.status === 409 || e.status === 415)) {
+      if (
+        e instanceof ApiError &&
+        (e.status === 400 || e.status === 409 || e.status === 410 || e.status === 415)
+      ) {
         persist(null, storeId);
         setPending(null);
-        if (e.status === 409) refresh();
+        if (e.status === 409) {
+          refresh();
+          refreshPrivacy();
+          setAcceptedVersion(null);
+        }
       }
     } finally {
       submitting.current = false;
@@ -155,7 +197,50 @@ export function Checkout() {
                 disabled={busy || !!pending}
               />
             </label>
-            <p className="fine-print">Позовём по имени или номеру, когда заказ будет готов.</p>
+            <p className="fine-print">
+              Достаточно номера заказа. Имя и комментарий можно оставить пустыми.
+            </p>
+            <p className="fine-print">
+              В комментарии — только пожелания к приготовлению. Не указывайте сведения о здоровье,
+              платёжные данные и данные других людей.
+            </p>
+            {privacy && (
+              <label className="privacy-check">
+                <input
+                  type="checkbox"
+                  checked={acceptedVersion === privacy.id}
+                  onChange={(e) => setAcceptedVersion(e.target.checked ? privacy.id : null)}
+                  disabled={busy || !!pending}
+                />
+                <span>
+                  Даю отдельное{' '}
+                  <Link
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    to={'/consent?version=' + privacy.id}
+                  >
+                    согласие на обработку имени и комментария
+                  </Link>
+                  . Необязательно для заказа по номеру.
+                </span>
+              </label>
+            )}
+            {privacyError && !pending && <Notice>{privacyError}</Notice>}
+            <p className="fine-print">
+              {privacy ? (
+                <Link
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  to={'/privacy?version=' + privacy.id}
+                >
+                  Как обрабатываются данные заказа · версия {privacy.id}
+                </Link>
+              ) : (
+                <Link to="/privacy">Политика обработки данных</Link>
+              )}
+              . Необязательные поля удаляются через 7 дней после закрытия; личная квитанция — через
+              год.
+            </p>
           </section>
           <section className="panel checkout-section">
             <h2>

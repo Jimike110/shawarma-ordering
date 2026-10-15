@@ -49,9 +49,23 @@ type API struct {
 }
 
 func New(store *Store, c Config) *API {
+	if store.PrivacyKey == "" {
+		store.PrivacyKey = c.Secret
+	}
 	a := &API{Store: store, Config: c}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", a.health)
+	mux.HandleFunc("GET /api/privacy", a.privacyPublic)
+	mux.HandleFunc("GET /api/privacy/versions/{id}", a.privacyPublic)
+	mux.HandleFunc("GET /api/owner/privacy", a.ownerOnly(a.privacyOwner, false))
+	mux.HandleFunc("PUT /api/owner/privacy/draft", a.ownerOnly(a.privacyDraft, true))
+	mux.HandleFunc("POST /api/owner/privacy/publish", a.ownerOnly(a.privacyPublish, true))
+	mux.HandleFunc("GET /api/owner/privacy/retention", a.ownerOnly(a.privacyRetention, false))
+	mux.HandleFunc("POST /api/owner/privacy/retention", a.ownerOnly(a.privacyRetention, true))
+	mux.HandleFunc("GET /api/owner/privacy/requests", a.ownerOnly(a.privacyRequests, true))
+	mux.HandleFunc("GET /api/owner/privacy/destructions", a.ownerOnly(a.privacyDestructions, true))
+	mux.HandleFunc("POST /api/owner/privacy/requests", a.ownerOnly(a.privacyRequests, true))
+	mux.HandleFunc("POST /api/owner/privacy/requests/{id}", a.ownerOnly(a.privacyRequestAction, true))
 	mux.HandleFunc("GET /api/menu", a.menu)
 	mux.HandleFunc("POST /api/orders", a.createOrder)
 	mux.HandleFunc("GET /api/orders/{token}", a.track)
@@ -136,7 +150,7 @@ func fail(w http.ResponseWriter, e error) {
 	case errors.Is(e, ErrMissing):
 		reply(w, 404, map[string]string{"error": "Заказ или товар не найден."})
 	default:
-		log.Printf("API error: %v", e)
+		log.Printf("API request failed (%T)", e)
 		reply(w, 500, map[string]string{"error": "Не удалось выполнить запрос. Попробуйте ещё раз."})
 	}
 }
@@ -187,10 +201,19 @@ func (a *API) menu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	open, message := shop.Intake(time.Now())
+	var ready bool
+	if e = a.Store.DB.QueryRowContext(r.Context(), "SELECT current_version IS NOT NULL FROM privacy_settings WHERE id=1").Scan(&ready); e != nil {
+		fail(w, e)
+		return
+	}
+	if !ready {
+		open = false
+		message = "Оператор ещё не опубликовал документы. Приём новых заказов недоступен."
+	}
 	if actor(r.Context()).ID == 0 {
 		shop.StopReason = ""
 	}
-	reply(w, 200, map[string]any{"products": p, "settings": s, "accepting_orders": open, "intake_message": message, "estimated_minutes": minutes, "store": shop})
+	reply(w, 200, map[string]any{"products": p, "settings": s, "accepting_orders": open, "intake_message": message, "estimated_minutes": minutes, "store": shop, "privacy_ready": ready})
 }
 func (a *API) clientIP(r *http.Request) string {
 	if a.Config.TrustProxy {
@@ -205,7 +228,7 @@ func (a *API) clientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 func (a *API) limit(w http.ResponseWriter, r *http.Request, kind string, n int) bool {
-	ok, e := a.Store.Allow(r.Context(), kind+":"+Hash(a.clientIP(r)), n)
+	ok, e := a.Store.Allow(r.Context(), kind+":"+a.Store.privacyDigest("rate-ip", a.clientIP(r)), n)
 	if e != nil {
 		fail(w, e)
 		return false

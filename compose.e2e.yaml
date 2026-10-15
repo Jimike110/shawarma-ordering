@@ -21,6 +21,7 @@ services:
       PUBLIC_ORIGIN: http://web
       COOKIE_SECURE: 'false'
       AUTO_MIGRATE: 'true'
+      PRIVACY_JOURNAL_PATH: /tmp/e2e-deletion-journal.jsonl
     depends_on:
       db: { condition: service_healthy }
     healthcheck:

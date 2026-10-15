@@ -2,6 +2,7 @@ export interface SavedOrder {
   token: string;
   number?: number;
   created_at?: string;
+  expired?: boolean;
 }
 
 export const ORDER_HISTORY_CHANGED = 'shawarma-order-history-changed';
@@ -18,6 +19,7 @@ function validOrder(value: unknown): SavedOrder | null {
   )
     return null;
   const order: SavedOrder = { token: value.token };
+  if ('expired' in value && value.expired === true) order.expired = true;
   if (
     'number' in value &&
     typeof value.number === 'number' &&

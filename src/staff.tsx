@@ -149,6 +149,10 @@ function Login() {
           {busy ? 'Входим…' : 'Войти'}
         </button>
         <p className="fine-print">Забыли пароль? Обратитесь к владельцу.</p>
+        <p className="fine-print">
+          <Link to="/privacy">Политика обработки данных</Link> ·{' '}
+          <Link to="/consent">Отдельное согласие</Link>
+        </p>
         <Link to="/">Меню для гостей</Link>
       </form>
     </main>

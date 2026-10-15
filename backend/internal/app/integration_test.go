@@ -44,6 +44,17 @@ func testStore(t *testing.T) *Store {
 	if e = store.Migrate(context.Background()); e != nil {
 		t.Fatal(e)
 	}
+	store.PrivacyKey = strings.Repeat("test-key-", 8)
+	store.JournalPath = t.TempDir() + "/journal.jsonl"
+	o := testOperator()
+	policy, consent := privacyTexts(o)
+	if _, e = store.DB.Exec("INSERT INTO privacy_versions(template_version,operator,policy,consent) VALUES($1,$2,$3,$4)", privacyTemplate, mustJSON(o), policy, consent); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = store.DB.Exec("UPDATE privacy_settings SET draft=$1,current_version=1 WHERE id=1", mustJSON(o)); e != nil {
+		t.Fatal(e)
+	}
+
 	return store
 }
 func call(t *testing.T, a http.Handler, method, route string, body any, cookie *http.Cookie, origin string) *httptest.ResponseRecorder {

@@ -40,6 +40,14 @@ func (s *Store) Shop(ctx context.Context, id int64) (Shop, error) {
 		return p, e
 	}
 	p.Accepting, p.Message = p.Intake(time.Now())
+	var privacyReady bool
+	if e = s.DB.QueryRowContext(ctx, "SELECT current_version IS NOT NULL FROM privacy_settings WHERE id=1").Scan(&privacyReady); e != nil {
+		return p, e
+	}
+	if !privacyReady {
+		p.Accepting = false
+		p.Message = "Оператор ещё не опубликовал документы. Приём новых заказов недоступен."
+	}
 	return p, nil
 }
 func (s Shop) Intake(now time.Time) (bool, string) {
@@ -600,8 +608,8 @@ func (a *API) analytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	where := " FROM orders WHERE created_at >= $1 AND created_at < $2 AND ($3::bigint=0 OR store_id=$3) "
-	rows, e := tx.QueryContext(ctx, "SELECT status,count(*),sum(total)"+where+"GROUP BY status", start, end, id)
+	where := " FROM privacy_analytics WHERE day >= ($1::timestamptz AT TIME ZONE 'Europe/Moscow')::date AND day < ($2::timestamptz AT TIME ZONE 'Europe/Moscow')::date AND ($3::bigint=0 OR store_id=$3) "
+	rows, e := tx.QueryContext(ctx, "SELECT status,sum(orders),sum(value)"+where+"GROUP BY status", start, end, id)
 	if e != nil {
 		fail(w, e)
 		return
@@ -630,13 +638,12 @@ func (a *API) analytics(w http.ResponseWriter, r *http.Request) {
 		fail(w, e)
 		return
 	}
-	timing := ` WITH cohort AS (SELECT *` + where + `), timed AS (SELECT c.*, e.preparing,e.ready FROM cohort c LEFT JOIN LATERAL (SELECT min(created_at) FILTER(WHERE status='preparing') preparing,min(created_at) FILTER(WHERE status='ready') ready FROM order_events WHERE order_id=c.id) e ON true) `
-	e = tx.QueryRowContext(ctx, timing+`SELECT COALESCE(avg(extract(epoch from ready-preparing)/60) FILTER(WHERE ready>=preparing),0),count(*) FILTER(WHERE ready>=preparing),COALESCE(avg(extract(epoch from ready-created_at)/60) FILTER(WHERE ready IS NOT NULL AND initial_ready_at IS NOT NULL),0),count(*) FILTER(WHERE ready IS NOT NULL AND initial_ready_at IS NOT NULL),count(*) FILTER(WHERE ready>initial_ready_at),count(*) FILTER(WHERE ready IS NOT NULL AND initial_ready_at IS NOT NULL) FROM timed`, start, end, id).Scan(&report.PrepMinutes, &report.PrepSamples, &report.ReadyMinutes, &report.ReadySamples, &report.Late, &report.DeadlineSamples)
+	e = tx.QueryRowContext(ctx, `SELECT COALESCE(sum(prep_sum)/NULLIF(sum(prep_samples),0),0),COALESCE(sum(prep_samples),0),COALESCE(sum(ready_sum)/NULLIF(sum(ready_samples),0),0),COALESCE(sum(ready_samples),0),COALESCE(sum(late),0),COALESCE(sum(deadline_samples),0)`+where, start, end, id).Scan(&report.PrepMinutes, &report.PrepSamples, &report.ReadyMinutes, &report.ReadySamples, &report.Late, &report.DeadlineSamples)
 	if e != nil {
 		fail(w, e)
 		return
 	}
-	rows, e = tx.QueryContext(ctx, "SELECT to_char(created_at AT TIME ZONE 'Europe/Moscow','YYYY-MM-DD'),count(*),COALESCE(sum(total) FILTER(WHERE status='completed'),0)"+where+"GROUP BY 1 ORDER BY 1", start, end, id)
+	rows, e = tx.QueryContext(ctx, "SELECT to_char(day,'YYYY-MM-DD'),sum(orders),sum(value)"+where+"GROUP BY 1 ORDER BY 1", start, end, id)
 	if e != nil {
 		fail(w, e)
 		return
@@ -656,7 +663,8 @@ func (a *API) analytics(w http.ResponseWriter, r *http.Request) {
 		fail(w, e)
 		return
 	}
-	rows, e = tx.QueryContext(ctx, "WITH cohort AS (SELECT items"+where+"AND status='completed') SELECT item->>'name',sum((item->>'quantity')::int),sum((item->>'quantity')::bigint*(item->>'price')::bigint) FROM cohort CROSS JOIN LATERAL jsonb_array_elements(items) item GROUP BY 1 ORDER BY 2 DESC,1 LIMIT 20", start, end, id)
+	productWhere := strings.Replace(where, "privacy_analytics", "privacy_product_analytics", 1)
+	rows, e = tx.QueryContext(ctx, "SELECT name,sum(quantity),sum(value)"+productWhere+"GROUP BY name ORDER BY 2 DESC,1 LIMIT 20", start, end, id)
 	if e != nil {
 		fail(w, e)
 		return
@@ -676,7 +684,7 @@ func (a *API) analytics(w http.ResponseWriter, r *http.Request) {
 		fail(w, e)
 		return
 	}
-	rows, e = tx.QueryContext(ctx, timing+"SELECT store_id,count(*),COALESCE(sum(total) FILTER(WHERE status='completed'),0),COALESCE(avg(extract(epoch from ready-preparing)/60) FILTER(WHERE ready>=preparing),0),count(*) FILTER(WHERE ready>=preparing) FROM timed GROUP BY store_id ORDER BY store_id", start, end, id)
+	rows, e = tx.QueryContext(ctx, "SELECT store_id,sum(orders),sum(value),COALESCE(sum(prep_sum)/NULLIF(sum(prep_samples),0),0),sum(prep_samples)"+where+"GROUP BY store_id ORDER BY store_id", start, end, id)
 	if e != nil {
 		fail(w, e)
 		return
