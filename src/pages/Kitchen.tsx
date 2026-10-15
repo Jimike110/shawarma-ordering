@@ -18,6 +18,7 @@ import {
   Volume2,
   VolumeX,
   ClipboardList,
+  Trash2,
 } from 'lucide-react';
 import { ApiError, errorMessage, json } from '../api';
 import { usePolling } from '../usePolling';
@@ -318,6 +319,89 @@ function OrderCard({
         </p>
       )}
     </article>
+  );
+}
+function DeleteProductDialog({
+  product,
+  close,
+  deleted,
+  expired,
+}: {
+  product: Product;
+  close: () => void;
+  deleted: (alreadyRemoved: boolean) => void;
+  expired: () => void;
+}) {
+  const { request: api } = useStaffStore();
+  const ref = useRef<HTMLDialogElement>(null);
+  const removed = useRef(false);
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState('');
+  useEffect(() => {
+    const restore = document.activeElement as HTMLElement;
+    const dialog = ref.current;
+    dialog?.showModal();
+    return () => {
+      dialog?.close();
+      if (removed.current) document.getElementById('kitchen-menu-heading')?.focus();
+      else restore?.focus();
+    };
+  }, []);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api('/kitchen/products/' + product.id, { method: 'DELETE' });
+      removed.current = true;
+      deleted(false);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) {
+        removed.current = true;
+        deleted(true);
+      } else {
+        setError(errorMessage(e));
+        if (e instanceof ApiError && e.status === 401) expired();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <dialog
+      className="admin-modal"
+      ref={ref}
+      aria-labelledby="delete-product-title"
+      aria-describedby="delete-product-description"
+      onCancel={(e) => {
+        e.preventDefault();
+        if (!busy) close();
+      }}
+    >
+      <form onSubmit={submit}>
+        <h2 id="delete-product-title">Удалить товар?</h2>
+        <p id="delete-product-description">
+          «{product.name}» будет удалён из меню этой точки. Отменить удаление нельзя.
+        </p>
+        <p className="muted">Состав и цены в уже оформленных заказах сохранятся.</p>
+        {error && <Notice>{error}</Notice>}
+        <div className="form-actions">
+          <button
+            autoFocus
+            type="button"
+            className="button secondary"
+            disabled={busy}
+            onClick={close}
+          >
+            Отмена
+          </button>
+          <button type="submit" className="button danger" disabled={busy}>
+            {busy ? 'Удаляем…' : 'Удалить товар'}
+          </button>
+        </div>
+      </form>
+    </dialog>
   );
 }
 function ProductEditor({
@@ -781,6 +865,8 @@ export function Kitchen() {
     [pauseReason, setPauseReason] = useState('');
   const [editing, setEditing] = useState<Product | null>(null),
     [search, setSearch] = useState('');
+  const [deleting, setDeleting] = useState<Product | null>(null),
+    [menuNotice, setMenuNotice] = useState('');
   const sound = useKitchenSound();
   const [newCount, setNewCount] = useState(0);
   const seen = useRef<Set<number> | null>(null);
@@ -1059,6 +1145,22 @@ export function Kitchen() {
       )}
       {tab === 'menu' && (
         <>
+          {deleting && (
+            <DeleteProductDialog
+              product={deleting}
+              close={() => setDeleting(null)}
+              expired={expired}
+              deleted={(alreadyRemoved) => {
+                setMenuNotice(
+                  alreadyRemoved
+                    ? `«${deleting.name}» уже отсутствует в меню.`
+                    : `«${deleting.name}» удалён из меню.`,
+                );
+                setDeleting(null);
+                menu.refresh();
+              }}
+            />
+          )}
           {editing ? (
             <ProductEditor
               key={editing.id}
@@ -1072,7 +1174,9 @@ export function Kitchen() {
           ) : (
             <>
               <div className="section-top">
-                <h2>Ваше меню</h2>
+                <h2 id="kitchen-menu-heading" tabIndex={-1}>
+                  Ваше меню
+                </h2>
                 {role !== 'worker' && (
                   <button
                     className="button small"
@@ -1097,6 +1201,8 @@ export function Kitchen() {
                   </button>
                 )}
               </div>
+              {menuNotice && <Notice kind="success">{menuNotice}</Notice>}
+              {menu.data?.products.length === 0 && <p className="muted">Меню пока пусто.</p>}
               <div className="staff-products">
                 {menu.data?.products.map((p) => (
                   <div className="panel staff-product" key={p.id}>
@@ -1122,9 +1228,27 @@ export function Kitchen() {
                       </button>
                     </div>
                     {role !== 'worker' && (
-                      <button className="button secondary small" onClick={() => setEditing(p)}>
-                        Изменить
-                      </button>
+                      <div className="staff-product-actions">
+                        <button
+                          className="button secondary small"
+                          disabled={busy}
+                          onClick={() => setEditing(p)}
+                        >
+                          Изменить
+                        </button>
+                        <button
+                          type="button"
+                          className="button secondary small product-delete"
+                          aria-label={'Удалить товар ' + p.name}
+                          disabled={busy}
+                          onClick={() => {
+                            setMenuNotice('');
+                            setDeleting(p);
+                          }}
+                        >
+                          <Trash2 size={16} aria-hidden="true" /> Удалить
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}

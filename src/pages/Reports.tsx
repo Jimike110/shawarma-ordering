@@ -544,6 +544,7 @@ const actionLabels: Record<string, string> = {
   'store.status': 'Статус точки',
   'settings.update': 'Настройки точки',
   'product.save': 'Изменение меню',
+  'product.delete': 'Удаление товара',
   'product.availability': 'Доступность товара',
   'account.save': 'Учётная запись',
   'account.password_reset': 'Сброс пароля',

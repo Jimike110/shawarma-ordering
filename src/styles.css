@@ -2166,6 +2166,31 @@ input[type='checkbox'] {
   font-size: 14px;
   display: block;
 }
+.staff-product > .staff-product-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.staff-product .product-delete {
+  color: #a7242c;
+}
+.staff-product-actions .button {
+  min-height: 44px;
+}
+#kitchen-menu-heading:focus {
+  outline: none;
+}
+@media (max-width: 600px) {
+  .staff-product > .staff-product-actions {
+    flex: 1 0 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .staff-product-actions .button {
+    flex: 1;
+  }
+}
 .availability-toggle {
   display: flex;
   align-items: center;
