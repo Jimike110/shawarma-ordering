@@ -85,6 +85,7 @@ func New(store *Store, c Config) *API {
 	mux.HandleFunc("PATCH /api/staff/stores/{storeId}/products/{id}/availability", a.scoped(a.availability, false))
 	mux.HandleFunc("POST /api/staff/stores/{storeId}/products", a.scoped(a.saveProduct, true))
 	mux.HandleFunc("PUT /api/staff/stores/{storeId}/products/{id}", a.scoped(a.saveProduct, true))
+	mux.HandleFunc("DELETE /api/staff/stores/{storeId}/products/{id}", a.scoped(a.deleteProduct, true))
 	mux.HandleFunc("PUT /api/staff/stores/{storeId}/settings", a.scoped(a.saveSettings, true))
 	mux.HandleFunc("GET /api/staff/stores/{storeId}/analytics", a.scoped(a.analytics, true))
 	mux.HandleFunc("GET /api/staff/stores/{storeId}/activity", a.scoped(a.activity, true))
@@ -109,6 +110,7 @@ func New(store *Store, c Config) *API {
 	mux.HandleFunc("PATCH /api/kitchen/orders/{id}", a.scoped(a.updateOrder, false))
 	mux.HandleFunc("POST /api/kitchen/products", a.scoped(a.saveProduct, true))
 	mux.HandleFunc("PUT /api/kitchen/products/{id}", a.scoped(a.saveProduct, true))
+	mux.HandleFunc("DELETE /api/kitchen/products/{id}", a.scoped(a.deleteProduct, true))
 	mux.HandleFunc("PUT /api/kitchen/settings", a.scoped(a.saveSettings, true))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, 404, map[string]string{"error": "Маршрут не найден."})
@@ -344,6 +346,17 @@ func (a *API) saveProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, 200, p)
+}
+func (a *API) deleteProduct(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+	if e := a.Store.DeleteProduct(r.Context(), id); e != nil {
+		fail(w, e)
+		return
+	}
+	reply(w, 200, map[string]bool{"ok": true})
 }
 func (a *API) saveSettings(w http.ResponseWriter, r *http.Request) {
 	var s Settings

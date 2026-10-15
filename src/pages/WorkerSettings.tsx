@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useStaffStore } from '../staff';
+import { useStaffStore } from '../staffStore';
 import { json, errorMessage } from '../api';
 import { Notice } from '../ui';
 import type { Settings } from '../types';

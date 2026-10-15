@@ -1,12 +1,6 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-  type FormEvent,
-} from 'react';
+import { AuthContext, useAuth } from './auth';
+import { StaffStoreContext } from './staffStore';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, Outlet, useParams } from 'react-router-dom';
 import { api, ApiError, errorMessage, json } from './api';
 import type { StaffAccount, Store } from './types';
@@ -15,21 +9,6 @@ import { MenuProvider } from './menu';
 import { Kitchen } from './pages/Kitchen';
 import { StoreReports } from './pages/Reports';
 
-interface AuthValue {
-  user: StaffAccount | null;
-  loading: boolean;
-  error: string;
-  setUser: (u: StaffAccount | null) => void;
-  reload: () => Promise<void>;
-  invalidate: () => void;
-  logout: () => Promise<void>;
-}
-const AuthContext = createContext<AuthValue | null>(null);
-export function useAuth() {
-  const a = useContext(AuthContext);
-  if (!a) throw new Error('Missing staff authentication');
-  return a;
-}
 export function StaffAuth() {
   const [user, setUser] = useState<StaffAccount | null>(null),
     [loading, setLoading] = useState(true),
@@ -307,12 +286,6 @@ export function StaffTop() {
     </>
   );
 }
-const StoreContext = createContext<{ id: number; role: string; request: typeof api } | null>(null);
-export function useStaffStore() {
-  const s = useContext(StoreContext);
-  if (!s) throw new Error('Missing assigned store');
-  return s;
-}
 export function StoreWorkspace({ reports = false }: { reports?: boolean }) {
   const { storeId } = useParams();
   const { user } = useAuth();
@@ -332,14 +305,14 @@ export function StoreWorkspace({ reports = false }: { reports?: boolean }) {
     );
   if (reports && role === 'worker') return <Navigate to={'/staff/stores/' + id} replace />;
   return (
-    <StoreContext.Provider value={{ id, role, request }}>
+    <StaffStoreContext.Provider value={{ id, role, request }}>
       <MenuProvider key={id + ':' + user!.id} endpoint={'/staff/stores/' + id + '/menu'}>
         <div className="container">
           <StaffTop />
         </div>
         {reports ? <StoreReports /> : <Kitchen key={id + ':' + user!.id} />}
       </MenuProvider>
-    </StoreContext.Provider>
+    </StaffStoreContext.Provider>
   );
 }
 export function OwnerGate() {

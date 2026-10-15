@@ -1,12 +1,5 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { OwnerContext } from './ownerContext';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Link,
   NavLink,
@@ -28,35 +21,12 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { api, errorMessage } from './api';
-import { useAuth } from './staff';
+import { useAuth } from './auth';
 import { usePolling } from './usePolling';
 import { Notice } from './ui';
 import type { Store, IntakeBlocker } from './types';
 import './owner.css';
 
-type Workspace = {
-  stores: Store[] | null;
-  selected: string;
-  visible: Store[];
-  refresh: () => void;
-  href: (path: string, extra?: Record<string, string>) => string;
-  selectStore: (id: string, saved?: boolean) => void;
-  setDirty: (key: symbol, dirty: boolean) => void;
-};
-const Context = createContext<Workspace | null>(null);
-export function useOwnerWorkspace() {
-  const value = useContext(Context);
-  if (!value) throw new Error('Missing owner workspace');
-  return value;
-}
-export function useOwnerDraft(dirty: boolean) {
-  const { setDirty } = useOwnerWorkspace();
-  const key = useRef(Symbol());
-  useEffect(() => {
-    setDirty(key.current, dirty);
-    return () => setDirty(key.current, false);
-  }, [dirty, setDirty]);
-}
 const destinations = [
   { path: '/owner', label: 'Обзор', icon: LayoutDashboard },
   { path: '/owner/stores', label: 'Точки', icon: MapPin },
@@ -152,7 +122,7 @@ export function OwnerLayout() {
     </nav>
   );
   return (
-    <Context.Provider
+    <OwnerContext.Provider
       value={{
         stores: q.data,
         selected,
@@ -256,7 +226,7 @@ export function OwnerLayout() {
         </div>
         <div className="owner-mobile-nav">{nav}</div>
       </div>
-    </Context.Provider>
+    </OwnerContext.Provider>
   );
 }
 
@@ -345,7 +315,7 @@ export function ActionMenu({
     </details>
   );
 }
-export const blockerLabels: Record<IntakeBlocker, string> = {
+const blockerLabels: Record<IntakeBlocker, string> = {
   archived: 'В архиве',
   unpublished: 'Черновик · не опубликована',
   privacy_unpublished: 'Не опубликованы документы оператора',

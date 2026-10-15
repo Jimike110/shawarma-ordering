@@ -1,3 +1,4 @@
+import { useOwnerDraft } from '../ownerContext';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorMessage, json } from '../api';
@@ -6,7 +7,7 @@ import type { Operator, PrivacyDocument } from '../privacy';
 import type { Store } from '../types';
 import { Modal } from './OwnerForms';
 import { Subnav } from './Owner';
-import { OwnerLoading, useOwnerDraft } from '../ownerWorkspace';
+import { OwnerLoading } from '../ownerWorkspace';
 
 interface PrivacyState {
   draft: Operator;

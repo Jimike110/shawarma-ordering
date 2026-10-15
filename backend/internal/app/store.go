@@ -186,6 +186,31 @@ func (s *Store) SaveProduct(ctx context.Context, p Product) (Product, error) {
 	return p, tx.Commit()
 }
 
+func (s *Store) DeleteProduct(ctx context.Context, id int64) error {
+	tx, e := s.DB.BeginTx(ctx, nil)
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback()
+	// Serialize deletion with checkout, menu copying and other menu edits.
+	if _, e = tx.ExecContext(ctx, "SELECT id FROM stores WHERE id=$1 FOR UPDATE", shopID(ctx)); e != nil {
+		return e
+	}
+	var name string
+	e = tx.QueryRowContext(ctx, "DELETE FROM products WHERE id=$1 AND store_id=$2 RETURNING name", id, shopID(ctx)).Scan(&name)
+	if errors.Is(e, sql.ErrNoRows) {
+		return ErrMissing
+	}
+	if e != nil {
+		return e
+	}
+	// Orders retain their own purchased-item snapshots; never alter those here.
+	if e = auditDetails(ctx, tx, "product.delete", fmt.Sprint(id), mustJSON(map[string]string{"name": name})); e != nil {
+		return e
+	}
+	return tx.Commit()
+}
+
 const orderCols = "id,number,CASE WHEN personal_blocked THEN '' ELSE customer_name END,CASE WHEN personal_blocked THEN '' ELSE note END,status,total,items,estimated_ready_at,created_at,updated_at,CASE WHEN personal_blocked THEN '' ELSE cancellation_reason END,store_id,store_slug,shop,cancelled_by"
 
 func scanOrder(row interface{ Scan(...any) error }) (Order, error) {

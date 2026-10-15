@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { usePolling } from '../usePolling';
 import { Notice, Loading } from '../ui';
-import { useStaffStore } from '../staff';
+import { useStaffStore } from '../staffStore';
 import { clock, rub, statusLabels, type Store, type Order } from '../types';
 import { OwnerLoading, RefreshStatus } from '../ownerWorkspace';
 

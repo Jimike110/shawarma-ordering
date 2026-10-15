@@ -30,6 +30,7 @@ The original shop setup is retained in `config/shop.json`, including the origina
 ## Architecture
 
 - `src/main.tsx`: React 19, React Router, shared cart and menu providers.
+- Staff/owner context identities live in dependency-only `src/auth.ts`, `src/staffStore.ts` and `src/ownerContext.ts`. Import hooks from those modules, never from screen/provider component files. A former `staff → Kitchen/Reports → staff` cycle reproduced “Missing staff authentication” when Vite refreshed Kitchen while Owner was open. Keep this graph acyclic; HMR regression tests edit only a disposable source copy. `src/ErrorBoundary.tsx` supplies independent Russian route/root recovery screens without exposing raw errors, clearing browser storage or resubmitting checkout.
 - Routes: `/` opens the last selected published store (otherwise the first); customers choose the pickup address using the header dropdown. `/s/:slug` menu and `/s/:slug/checkout`, `/orders` browser order history, `/track#PRIVATE_TOKEN`, `/kitchen` staff entry, `/staff/stores/:storeId` scoped kitchen, `/owner` business dashboard. Store baskets and pending submissions stay independent when switching. Legacy `/checkout` and public API requests stay anchored to original store 1; `/#orders` redirects to `/orders`.
 - `src/menu.tsx`: one shared menu polling request for layout/customer/staff pages.
 - `src/cart.tsx`: persistent cart, canonical option-aware line keys, current option pricing, 20 items per variant, 50 total items, 30 distinct lines.

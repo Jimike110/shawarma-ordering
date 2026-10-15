@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, errorMessage, json } from '../api';
 import { Notice } from '../ui';
-import { useOwnerDraft } from '../ownerWorkspace';
+import { useOwnerDraft } from '../ownerContext';
 import { randomKey } from '../requestKey';
 import type { StaffAccount, Store, Product } from '../types';
 

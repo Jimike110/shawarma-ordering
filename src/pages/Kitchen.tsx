@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { useAuth, useStaffStore } from '../staff';
+import { useAuth } from '../auth';
+import { useStaffStore } from '../staffStore';
 import { WorkerSettings } from './WorkerSettings';
 import { useKitchenSound } from '../useKitchenSound';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
@@ -1052,7 +1053,7 @@ export function Kitchen() {
           )}
           <p className="fine-print">
             Все активные заказы. Закрытые: до 300 за последние 24 часа. Звук работает, пока эта
-            страница открыта. 
+            страница открыта.
           </p>
         </>
       )}

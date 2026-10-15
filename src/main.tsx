@@ -25,10 +25,11 @@ import { Owner } from './pages/Owner';
 import { Privacy } from './pages/Privacy';
 import { OwnerPrivacy } from './pages/OwnerPrivacy';
 import { OwnerLayout } from './ownerWorkspace';
+import { AppErrorBoundary, RecoveryScreen, RouteErrorBoundary } from './ErrorBoundary';
 import './styles.css';
 const router = createBrowserRouter(
   createRoutesFromElements(
-    <>
+    <Route errorElement={<RouteErrorBoundary />}>
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/consent" element={<Privacy consent />} />
       <Route element={<PickupStoresProvider />}>
@@ -63,20 +64,14 @@ const router = createBrowserRouter(
           </Route>
         </Route>
       </Route>
-      <Route
-        path="*"
-        element={
-          <main className="container empty">
-            <h1>Страница не найдена</h1>
-            <a href="/">Вернуться в меню</a>
-          </main>
-        }
-      />
-    </>,
+      <Route path="*" element={<RecoveryScreen status={404} />} />
+    </Route>,
   ),
 );
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <AppErrorBoundary>
+      <RouterProvider router={router} />
+    </AppErrorBoundary>
   </React.StrictMode>,
 );
