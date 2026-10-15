@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth, useStaffStore } from '../staff';
 import { WorkerSettings } from './WorkerSettings';
+import { useKitchenSound } from '../useKitchenSound';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   Clock3,
@@ -779,10 +780,9 @@ export function Kitchen() {
     [pauseReason, setPauseReason] = useState('');
   const [editing, setEditing] = useState<Product | null>(null),
     [search, setSearch] = useState('');
-  const [sound, setSound] = useState(false),
-    [newCount, setNewCount] = useState(0);
-  const audio = useRef<AudioContext | null>(null),
-    seen = useRef<Set<number> | null>(null);
+  const sound = useKitchenSound();
+  const [newCount, setNewCount] = useState(0);
+  const seen = useRef<Set<number> | null>(null);
   const loadOrders = useCallback(
     async (signal: AbortSignal) => {
       try {
@@ -805,40 +805,15 @@ export function Kitchen() {
     seen.current = ids;
     if (fresh) {
       setNewCount((count) => count + fresh);
-      if (sound && audio.current?.state === 'running') {
-        const osc = audio.current.createOscillator(),
-          gain = audio.current.createGain();
-        osc.connect(gain);
-        gain.connect(audio.current.destination);
-        osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.12, audio.current.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audio.current.currentTime + 0.4);
-        osc.start();
-        osc.stop(audio.current.currentTime + 0.4);
-      }
+      sound.alert();
     }
-  }, [queue.data, auth, sound]);
+  }, [queue.data, auth, sound.alert]);
   useEffect(() => {
     if (!auth) {
       seen.current = null;
       setNewCount(0);
     }
   }, [auth]);
-  useEffect(
-    () => () => {
-      void audio.current?.close();
-    },
-    [],
-  );
-  async function toggleSound() {
-    try {
-      if (!audio.current) audio.current = new AudioContext();
-      await audio.current.resume();
-      setSound(!sound);
-    } catch {
-      setError('Не удалось включить звук. Новые заказы появятся в очереди.');
-    }
-  }
   const expired = () => setAuth(false);
   const refresh = () => {
     queue.refresh();
@@ -935,11 +910,12 @@ export function Kitchen() {
         </button>
         <button
           className="button secondary small"
-          onClick={() => void toggleSound()}
-          aria-pressed={sound}
+          data-kitchen-sound
+          onClick={sound.toggle}
+          aria-pressed={sound.enabled}
         >
-          {sound ? <Volume2 size={16} /> : <VolumeX size={16} />}{' '}
-          {sound ? 'Звук включён' : 'Включить звук'}
+          {sound.enabled ? <Volume2 size={16} /> : <VolumeX size={16} />}{' '}
+          {!sound.enabled ? 'Включить звук' : sound.ready ? 'Звук включён' : 'Активировать звук'}
         </button>
         <span className="queue-refresh">
           {queue.error
@@ -952,6 +928,16 @@ export function Kitchen() {
           <RefreshCw size={18} />
         </button>
       </div>
+      {sound.error ? (
+        <Notice>{sound.error}</Notice>
+      ) : (
+        sound.enabled &&
+        !sound.ready && (
+          <p className="fine-print" role="status">
+            Звук включён по умолчанию и ожидает первого нажатия на странице.
+          </p>
+        )
+      )}
       {error && <Notice>{error}</Notice>}
       {queue.error && <Notice>Очередь не обновилась. {queue.error}</Notice>}
       {menu.error && <Notice>Меню не обновилось. {menu.error}</Notice>}
@@ -1066,7 +1052,7 @@ export function Kitchen() {
           )}
           <p className="fine-print">
             Все активные заказы. Закрытые: до 300 за последние 24 часа. Звук работает, пока эта
-            страница открыта.
+            страница открыта. 
           </p>
         </>
       )}

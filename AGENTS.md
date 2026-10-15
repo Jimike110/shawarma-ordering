@@ -90,6 +90,8 @@ Inter must load from the local font asset; a `font-family` declaration alone is 
 
 Order ETA presets persist immediately and announce the result. Settings presets and schedule copying update only the form draft. Cancellation suggestions never cancel automatically. Availability changes must wait for a successful API result before displaying the new state. Do not change checkout retry/snapshot rules during visual work.
 
+Kitchen sound starts enabled on each visit. `src/useKitchenSound.ts` preloads/decodes the locally hosted user-selected `public/audio/new-order-313025.mp3` (Akshai kanth / Pixabay; attribution and checksum in `public/audio/CREDITS.md`), resumes browser audio automatically where allowed and on a normal click/key press otherwise, retaining an alert received before activation or loading. It plays the complete recording; muting stops playback and lasts only for the current page visit. The UI distinguishes blocked/loading audio from working sound. Audio needs the kitchen page open and remains subject to browser/device restrictions.
+
 ## Security and data invariants
 
 - Never print `.env`, passwords, session cookies, or private tracking tokens. Never commit them. Do not bake `.env*`, backups, or browser artifacts into Docker images.
