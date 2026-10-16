@@ -203,6 +203,9 @@ class MainActivity : ComponentActivity() {
     private fun bindIfChanged(forceSwitch: Boolean = false) {
         if (forceSwitch) {
             generation++; lastCookie = null; stopMonitoring(); vault.clear()
+            // A new authenticated login starts a new shift. Keep the prior
+            // speaker verification, but obtain a fresh store-scoped credential.
+            resumeAfterBind = true
         }
         if (binding) return
         val cookies = CookieManager.getInstance().getCookie(BuildConfig.KITCHEN_ORIGIN + "/api/") ?: ""
@@ -233,7 +236,7 @@ class MainActivity : ComponentActivity() {
                         vault.save(c)
                         MonitorHealth.revoked = false
                         MonitorHealth.error = "Уведомления выключены. Включите их перед сменой."
-                        if (wasMonitoring) { resumeAfterBind = false; startRequested = true; prepareStart() }
+                        if (wasMonitoring || startRequested) { resumeAfterBind = false; startRequested = true; prepareStart() }
                     }
                 }
             } catch (e: Exception) {

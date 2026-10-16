@@ -149,12 +149,14 @@ test('worker changes temporary password, runs a shift, and cannot lift an owner 
     await card.getByLabel('Причина отмены').fill('Товар закончился');
     await card.getByRole('button', { name: 'Подтвердить отмену' }).click();
     await expect(card).not.toBeVisible();
+    await page.getByLabel('Управление кухней', { exact: true }).click();
     await page.getByRole('button', { name: 'Пауза', exact: true }).click();
     await page.getByLabel('Причина паузы').fill('Перегружена кухня');
     await page.getByRole('button', { name: 'Приостановить', exact: true }).click();
+    await page.getByLabel('Управление кухней', { exact: true }).click();
     await expect(page.getByRole('button', { name: 'Возобновить', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Возобновить', exact: true }).click();
-    await page.getByRole('button', { name: 'Меню', exact: true }).click();
+    await page.getByLabel('Раздел кухни', { exact: true }).selectOption('menu');
     await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Добавить товар', exact: true })).toHaveCount(0);
     const denied = await page.request.put('/api/staff/stores/1/settings', {
@@ -168,6 +170,7 @@ test('worker changes temporary password, runs a shift, and cannot lift an owner 
       { owner_stopped: true, reason: 'Проверка стопа владельца' },
       'PATCH',
     );
+    await page.getByLabel('Управление кухней', { exact: true }).click();
     await expect(page.getByRole('button', { name: 'Пауза', exact: true })).toBeDisabled({
       timeout: 20000,
     });
@@ -176,7 +179,7 @@ test('worker changes temporary password, runs a shift, and cannot lift an owner 
       data: { paused: false },
     });
     expect(resume.status()).toBe(403);
-    await page.getByRole('button', { name: 'Настройки', exact: true }).click();
+    await page.getByLabel('Раздел кухни', { exact: true }).selectOption('settings');
     await expect(page.getByRole('heading', { name: 'Работа смены' })).toBeVisible();
     for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: width > 720 ? 1000 : 844 });

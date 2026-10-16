@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Order } from '../types';
 
 function useMinimumWidth(width: number) {
@@ -26,6 +26,31 @@ export function KitchenBoard({
   const tablet = useMinimumWidth(800),
     wide = useMinimumWidth(1100);
   const [secondary, setSecondary] = useState('preparing');
+  const boardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = boardRef.current;
+    if (!tablet || !board || !element) return;
+    const measure = () => {
+      const viewport = window.visualViewport?.height ?? window.innerHeight;
+      const height = Math.max(220, viewport - element.getBoundingClientRect().top - 12);
+      const value = Math.floor(height) + 'px';
+      if (element.style.getPropertyValue('--kitchen-board-height') !== value)
+        element.style.setProperty('--kitchen-board-height', value);
+    };
+    const observer = new ResizeObserver(measure);
+    if (element.parentElement) observer.observe(element.parentElement);
+    element.parentElement
+      ?.querySelectorAll(':scope > *:not(.kitchen-board)')
+      .forEach((node) => observer.observe(node));
+    measure();
+    window.addEventListener('resize', measure);
+    window.visualViewport?.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+      window.visualViewport?.removeEventListener('resize', measure);
+    };
+  }, [tablet, wide, board]);
   if (!tablet || !board)
     return orders.length ? (
       <div className="kitchen-grid">{orders.map(renderOrder)}</div>
@@ -36,7 +61,10 @@ export function KitchenBoard({
       </div>
     );
   return (
-    <div className={'kitchen-board ' + (wide ? 'kitchen-board-wide' : 'kitchen-board-medium')}>
+    <div
+      ref={boardRef}
+      className={'kitchen-board ' + (wide ? 'kitchen-board-wide' : 'kitchen-board-medium')}
+    >
       {(['new', 'preparing', 'ready'] as const)
         .filter((status) => wide || status === 'new' || status === secondary)
         .map((status) => {

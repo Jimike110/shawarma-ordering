@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$Origin,
-    [int]$VersionCode = 2,
-    [string]$VersionName = '1.0.1',
+    [int]$VersionCode = 3,
+    [string]$VersionName = '1.0.2',
     [string]$InstalledGradle = '',
     [string]$JavaHome = '',
     [string]$AndroidSdk = '',

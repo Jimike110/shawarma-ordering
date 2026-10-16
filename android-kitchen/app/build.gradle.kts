@@ -12,8 +12,8 @@ android {
         applicationId = "ru.yasha.kitchen"
         minSdk = 26
         targetSdk = 36
-        versionCode = providers.gradleProperty("appVersionCode").orElse("2").get().toInt()
-        versionName = providers.gradleProperty("appVersionName").orElse("1.0.1").get()
+        versionCode = providers.gradleProperty("appVersionCode").orElse("3").get().toInt()
+        versionName = providers.gradleProperty("appVersionName").orElse("1.0.2").get()
         buildConfigField("String", "KITCHEN_ORIGIN", "\"$kitchenOrigin\"")
     }
     buildFeatures { buildConfig = true }

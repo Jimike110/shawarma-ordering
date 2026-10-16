@@ -75,7 +75,7 @@ test('staff contexts survive repeated kitchen and provider hot updates', async (
       original.replace('<h1>Кухня</h1>', '<h1 data-hmr-probe="kitchen">Кухня</h1>'),
     );
     await expect(page.locator('[data-hmr-probe="kitchen"]')).toBeVisible();
-    await page.getByRole('button', { name: 'Меню', exact: true }).click();
+    await page.getByLabel('Раздел кухни', { exact: true }).selectOption('menu');
     await expect(page.getByRole('button', { name: 'Добавить товар', exact: true })).toBeVisible();
   } finally {
     const before = updates;

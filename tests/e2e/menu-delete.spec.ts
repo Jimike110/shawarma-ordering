@@ -39,7 +39,7 @@ test('menu deletion confirms the item, retains failures and preserves purchased 
   const receipt = await ordered.json();
   await page.context().addCookies((await request.storageState()).cookies);
   await page.goto('/staff/stores/1');
-  await page.getByRole('button', { name: 'Меню', exact: true }).click();
+  await page.getByLabel('Раздел кухни', { exact: true }).selectOption('menu');
   const item = page
     .locator('.staff-product')
     .filter({ has: page.getByRole('heading', { name: product.name, exact: true }) });

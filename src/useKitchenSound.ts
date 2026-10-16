@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { releaseKitchenAudio, takeKitchenAudio } from './kitchenAudio';
 
 // Browsers may suspend audio until a user gesture. Keep the alert until audio
 // actually runs, rather than silently losing an order received before that tap.
@@ -60,7 +61,7 @@ export function useKitchenSound(native = false) {
       if (!enabledRef.current || !mounted) return;
       try {
         if (!audio.current) {
-          audio.current = new AudioContext();
+          audio.current = takeKitchenAudio();
           audio.current.addEventListener('statechange', sync);
         }
         const context = audio.current;
@@ -119,7 +120,7 @@ export function useKitchenSound(native = false) {
       buffer.current = null;
       audio.current = null;
       context?.removeEventListener('statechange', sync);
-      if (context && context.state !== 'closed') void context.close().catch(() => {});
+      if (context) releaseKitchenAudio(context);
     };
   }, [flush, native]);
   const alert = useCallback(() => {

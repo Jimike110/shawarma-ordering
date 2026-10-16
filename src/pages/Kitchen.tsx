@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { nativeKitchenAction, useNativeKitchen } from '../nativeKitchen';
 import { useKitchenHealth } from '../useKitchenHealth';
@@ -12,18 +11,15 @@ import { useKitchenSound } from '../useKitchenSound';
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Clock3,
-  LogOut,
   Pause,
   Play,
   Plus,
   RefreshCw,
   SlidersHorizontal,
   UtensilsCrossed,
-  LockKeyhole,
   Check,
   Volume2,
   VolumeX,
-  ClipboardList,
   Trash2,
 } from 'lucide-react';
 import { ApiError, errorMessage, json } from '../api';
@@ -51,6 +47,37 @@ const actionLabels: Partial<Record<Status, string>> = {
   ready: 'Выдать заказ',
 };
 const preparationTimes = [5, 10, 15, 20, 30];
+function KitchenControls({ children, section }: { children: ReactNode; section: string }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    ref.current?.removeAttribute('open');
+  }, [section]);
+  useEffect(() => {
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !ref.current?.contains(event.target))
+        ref.current?.removeAttribute('open');
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, []);
+  return (
+    <details
+      className="kitchen-controls"
+      ref={ref}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          ref.current?.removeAttribute('open');
+          ref.current?.querySelector('summary')?.focus();
+        }
+      }}
+    >
+      <summary aria-label="Управление кухней">
+        <SlidersHorizontal size={21} />
+      </summary>
+      <div className="kitchen-controls-menu">{children}</div>
+    </details>
+  );
+}
 function PauseDialog({
   reason,
   setReason,
@@ -905,7 +932,7 @@ function SettingsForm({
     </form>
   );
 }
-export function Kitchen() {
+export function Kitchen({ accountMenu }: { accountMenu?: ReactNode }) {
   const { invalidate, user } = useAuth();
   const { request: api, role, id: storeId } = useStaffStore();
   const auth = true;
@@ -922,8 +949,6 @@ export function Kitchen() {
     [menuNotice, setMenuNotice] = useState('');
   const native = useNativeKitchen();
   const sound = useKitchenSound(native.native);
-  const [newCount, setNewCount] = useState(0);
-  const seen = useRef<Set<number> | null>(null);
   const loadOrders = useCallback(
     async (signal: AbortSignal) => {
       try {
@@ -946,22 +971,8 @@ export function Kitchen() {
   );
   useEffect(() => {
     if (!auth || !queue.data) return;
-    const ids = new Set(queue.data.map((o) => o.id!));
-    const fresh = seen.current
-      ? queue.data.filter((o) => o.status === 'new' && !seen.current!.has(o.id!)).length
-      : 0;
-    seen.current = ids;
-    if (fresh) {
-      setNewCount((count) => count + fresh);
-    }
     sound.setPending(queue.data.some((o) => o.status === 'new'));
   }, [queue.data, auth, sound.setPending]);
-  useEffect(() => {
-    if (!auth) {
-      seen.current = null;
-      setNewCount(0);
-    }
-  }, [auth]);
   const expired = () => setAuth(false);
   const refresh = () => {
     queue.refresh();
@@ -1018,31 +1029,23 @@ export function Kitchen() {
       (o.number + ' ' + o.name).toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru')),
     )
     .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
-  const navigation = (
-    <nav className="kitchen-tabs" aria-label="Разделы кухни">
-      <button
-        aria-pressed={tab === 'orders'}
-        className={tab === 'orders' ? 'selected' : ''}
-        onClick={() => setTab('orders')}
-      >
-        <ClipboardList size={19} /> Заказы <span>{active.length}</span>
-      </button>
-      <button
-        aria-pressed={tab === 'menu'}
-        className={tab === 'menu' ? 'selected' : ''}
-        onClick={() => setTab('menu')}
-      >
-        <UtensilsCrossed size={19} /> Меню
-      </button>
-      <button
-        aria-pressed={tab === 'settings'}
-        className={tab === 'settings' ? 'selected' : ''}
-        onClick={() => setTab('settings')}
-      >
-        <SlidersHorizontal size={17} /> Настройки
-      </button>
-    </nav>
-  );
+  const newOrders = orders.filter((o) => o.status === 'new').length;
+  const monitoring = native.native ? native.state.monitoring : sound.enabled;
+  const audioReady = native.native ? native.state.audio_ready : sound.ready;
+  const showNew = () => {
+    setTab('orders');
+    setFilter('new');
+    setSearch('');
+  };
+  const intake = !menu.data
+    ? 'Подключаемся…'
+    : menu.data.store?.owner_stopped
+      ? 'Стоп владельца'
+      : menu.data.settings.paused
+        ? 'Приём на паузе'
+        : menu.data.accepting_orders
+          ? 'Принимаем заказы'
+          : menu.data.intake_message || 'Не принимаем заказы';
   return (
     <main
       className={
@@ -1051,18 +1054,108 @@ export function Kitchen() {
       }
     >
       <div className="kitchen-operations-header">
-        <div className="kitchen-title-row">
-          <div className="kitchen-heading">
-            <div>
-              <div className="eyebrow">{menu.data?.settings.address || 'ПАНЕЛЬ СОТРУДНИКОВ'}</div>
-              <h1>Кухня</h1>
-              <span className="kitchen-live-summary">
-                Новых: {orders.filter((o) => o.status === 'new').length}
-                {overdue > 0 ? ` · Опаздывают: ${overdue}` : ''}
-              </span>
-            </div>
+        <div className="kitchen-topbar">
+          <div className="kitchen-location">
+            <h1>Кухня</h1>
+            <span title={menu.data?.settings.address}>
+              {menu.data?.settings.address || 'Подключаемся…'}
+            </span>
           </div>
-          {navigation}
+          <button
+            className="kitchen-new-count"
+            onClick={showNew}
+            aria-pressed={tab === 'orders' && filter === 'new'}
+          >
+            Новые <b>{newOrders}</b>
+          </button>
+          <select
+            className="kitchen-section-select"
+            aria-label="Раздел кухни"
+            value={tab}
+            onChange={(e) => setTab(e.target.value)}
+          >
+            <option value="orders">Заказы · {active.length}</option>
+            <option value="menu">Меню</option>
+            <option value="settings">Настройки</option>
+          </select>
+          <KitchenControls section={tab}>
+            <p className="kitchen-control-title">Управление кухней</p>
+            <p className="fine-print">{intake}</p>
+            <button
+              className="button secondary"
+              disabled={!menu.data || busy || menu.data.store?.owner_stopped}
+              onClick={() => void togglePause()}
+            >
+              {menu.data?.settings.paused ? <Play size={16} /> : <Pause size={16} />}
+              {menu.data?.settings.paused ? 'Возобновить' : 'Пауза'}
+            </button>
+            <button
+              className="button secondary"
+              onClick={() => (native.native ? nativeKitchenAction('test') : sound.test())}
+            >
+              Проверить звук
+            </button>
+            {native.native && (
+              <button className="button secondary" onClick={() => nativeKitchenAction('settings')}>
+                Громкость и разрешения
+              </button>
+            )}
+            <p className="fine-print">
+              Оповещения повторяются, пока есть новые заказы.{' '}
+              {native.native
+                ? 'Фоновый мониторинг работает отдельно от страницы.'
+                : 'Для фоновых оповещений используйте приложение кухни.'}
+            </p>
+            {accountMenu}
+          </KitchenControls>
+        </div>
+        <div className="kitchen-statusline">
+          <span
+            className={'intake-status ' + (!menu.data?.accepting_orders ? 'paused' : '')}
+            title={intake}
+          >
+            <span className="status-dot" />
+            <span className="kitchen-intake-label">{intake}</span>
+          </span>
+          <button
+            className="kitchen-sound-status"
+            data-kitchen-sound
+            onClick={() =>
+              native.native
+                ? nativeKitchenAction(
+                    monitoring && !audioReady ? 'settings' : monitoring ? 'stop' : 'start',
+                  )
+                : sound.toggle()
+            }
+            aria-pressed={monitoring}
+            aria-label={
+              monitoring && audioReady
+                ? 'Остановить оповещения'
+                : native.native
+                  ? monitoring
+                    ? 'Громкость и разрешения'
+                    : 'Включить уведомления кухни'
+                  : 'Активировать звук'
+            }
+          >
+            {monitoring && audioReady ? <Volume2 size={18} /> : <VolumeX size={18} />}
+            {monitoring && audioReady
+              ? 'Звук включён'
+              : native.native && monitoring
+                ? 'Проверить звук'
+                : 'Включить звук'}
+          </button>
+          <span
+            className="kitchen-connection"
+            title={
+              queue.lastUpdated ? 'Обновлено ' + clock(queue.lastUpdated.toISOString()) : undefined
+            }
+          >
+            {queue.error ? 'Нет связи' : queue.lastUpdated ? 'На связи' : 'Подключение…'}
+          </span>
+          <button className="icon-button" aria-label="Обновить кухню" onClick={refresh}>
+            <RefreshCw size={18} />
+          </button>
         </div>
         {pauseDialog && (
           <PauseDialog
@@ -1073,77 +1166,6 @@ export function Kitchen() {
             submit={() => void togglePause()}
           />
         )}
-        <div className="kitchen-toolbar">
-          <span className={'intake-status ' + (!menu.data?.accepting_orders ? 'paused' : '')}>
-            <span className="status-dot" />
-            {!menu.data
-              ? 'Загружаем статус…'
-              : menu.data.store?.owner_stopped
-                ? 'Стоп владельца'
-                : menu.data.settings.paused
-                  ? 'Приём на паузе'
-                  : menu.data.accepting_orders
-                    ? 'Принимаем заказы'
-                    : menu.data.intake_message || 'Не принимаем заказы'}
-          </span>
-          <button
-            className="button secondary small"
-            disabled={!menu.data || busy || menu.data.store?.owner_stopped}
-            onClick={() => void togglePause()}
-          >
-            {menu.data?.settings.paused ? <Play size={16} /> : <Pause size={16} />}{' '}
-            {menu.data?.settings.paused ? 'Возобновить' : 'Пауза'}
-          </button>
-          <button
-            className="button secondary small"
-            data-kitchen-sound
-            onClick={() =>
-              native.native
-                ? nativeKitchenAction(native.state.monitoring ? 'stop' : 'start')
-                : sound.toggle()
-            }
-            aria-pressed={native.native ? native.state.monitoring : sound.enabled}
-          >
-            {(native.native ? native.state.monitoring : sound.enabled) ? (
-              <Volume2 size={16} />
-            ) : (
-              <VolumeX size={16} />
-            )}{' '}
-            {native.native
-              ? native.state.monitoring
-                ? 'Остановить оповещения'
-                : 'Включить уведомления кухни'
-              : !sound.enabled
-                ? 'Включить оповещения'
-                : sound.ready
-                  ? 'Остановить оповещения'
-                  : 'Активировать звук'}
-          </button>
-          <button
-            className="button secondary small"
-            onClick={() => (native.native ? nativeKitchenAction('test') : sound.test())}
-          >
-            Проверить звук
-          </button>
-          {native.native && (
-            <button
-              className="button secondary small"
-              onClick={() => nativeKitchenAction('settings')}
-            >
-              Громкость и разрешения
-            </button>
-          )}
-          <span className="queue-refresh">
-            {queue.error
-              ? 'Связь прервалась'
-              : queue.lastUpdated
-                ? 'Обновлено ' + clock(queue.lastUpdated.toISOString())
-                : 'Подключаемся…'}
-          </span>
-          <button className="icon-button" aria-label="Обновить кухню" onClick={refresh}>
-            <RefreshCw size={18} />
-          </button>
-        </div>
       </div>
       {health.stale && (
         <Notice kind="warning">
@@ -1176,72 +1198,37 @@ export function Kitchen() {
       {error && <Notice>{error}</Notice>}
       {queue.error && <Notice>Очередь не обновилась. {queue.error}</Notice>}
       {menu.error && <Notice>Меню не обновилось. {menu.error}</Notice>}
-      {(newCount > 0 || orders.some((o) => o.status === 'new')) && (
-        <div className="new-orders-notice" role="status">
-          <span>Новых заказов: {orders.filter((o) => o.status === 'new').length}</span>
-          <button
-            onClick={() => {
-              setTab('orders');
-              setFilter('new');
-              setSearch('');
-              setNewCount(0);
-            }}
-          >
-            Посмотреть
-          </button>
-        </div>
-      )}
       {tab === 'orders' && (
         <>
-          <div className="queue-stats">
-            <button type="button" aria-pressed={filter === 'new'} onClick={() => setFilter('new')}>
-              <b>{orders.filter((o) => o.status === 'new').length}</b> новых
-            </button>
-            <button
-              type="button"
-              aria-pressed={filter === 'preparing'}
-              onClick={() => setFilter('preparing')}
+          <div className="kitchen-queue-controls">
+            <label className="queue-search">
+              <span className="sr-only">Найти заказ</span>
+              <input
+                type="search"
+                placeholder="Номер заказа или имя"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+            <select
+              aria-label="Статус заказов"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
             >
-              <b>{orders.filter((o) => o.status === 'preparing').length}</b> готовим
-            </button>
-            <button
-              type="button"
-              aria-pressed={filter === 'ready'}
-              onClick={() => setFilter('ready')}
-            >
-              <b>{orders.filter((o) => o.status === 'ready').length}</b> ждут выдачи
-            </button>
-            <span className={overdue ? 'text-error' : ''}>
-              <b>{overdue}</b> опаздывают
-            </span>
-          </div>
-          <label className="queue-search">
-            <span className="sr-only">Найти заказ</span>
-            <input
-              type="search"
-              placeholder="Номер заказа или имя"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </label>
-          <div className="filters">
-            {[
-              ['active', 'В работе'],
-              ['new', 'Новые'],
-              ['preparing', 'Готовим'],
-              ['ready', 'Готовы'],
-              ['completed', 'Выданы'],
-              ['cancelled', 'Отменены'],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                aria-pressed={filter === value}
-                className={filter === value ? 'selected' : ''}
-                onClick={() => setFilter(value)}
-              >
-                {label}
-              </button>
-            ))}
+              {[
+                ['active', 'В работе · ' + active.length],
+                ['new', 'Новые · ' + newOrders],
+                ['preparing', 'Готовим · ' + orders.filter((o) => o.status === 'preparing').length],
+                ['ready', 'К выдаче · ' + orders.filter((o) => o.status === 'ready').length],
+                ['completed', 'Выданы'],
+                ['cancelled', 'Отменены'],
+              ].map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            {overdue > 0 && <span className="text-error">Опаздывают: {overdue}</span>}
           </div>
           {queue.loading && !queue.data ? (
             <p role="status">Загружаем очередь…</p>
@@ -1264,13 +1251,6 @@ export function Kitchen() {
               )}
             />
           )}
-          <p className="fine-print">
-            Все активные заказы. Закрытые: до 300 за последние 24 часа. Оповещения повторяются, пока
-            есть новые заказы.{' '}
-            {native.native
-              ? 'Фоновую работу проверяйте в уведомлении Android.'
-              : 'Для фоновых оповещений используйте приложение кухни.'}
-          </p>
         </>
       )}
       {tab === 'menu' && (

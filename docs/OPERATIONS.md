@@ -28,7 +28,7 @@ An account may be a manager at one store and a worker at another. Owners do not 
 
 Browser audio repeats every 15 seconds while any order is **new**, including orders already present at login/reload. Viewing it or editing its ETA does not silence it; starting preparation/cancelling does. An outage preserves alerts for the last known unattended orders and labels that state unconfirmed. Stopping monitoring is explicit and leaves a warning; there is no saved permanent mute.
 
-For locked-screen operation use the [private Android app](../android-kitchen/README.md), enable monitoring and complete its permission/battery/speaker checks. Browser audio remains subject to tab suspension/autoplay restrictions. Customer tracking has no sound or vibration.
+For locked-screen operation use the [private Android app](../android-kitchen/README.md). Entering an authenticated shared kitchen starts monitoring automatically after its initial permission/battery/speaker checks. Confirm the Android monitoring notification and visible sound state before the shift. Browser login unlocks audio during the login gesture, but browser audio remains subject to tab suspension/autoplay restrictions. Customer tracking has no sound or vibration.
 
 ### Shared kitchens and devices
 

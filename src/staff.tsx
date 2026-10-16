@@ -9,6 +9,7 @@ import { MenuProvider } from './menu';
 import { Kitchen } from './pages/Kitchen';
 import { StoreReports } from './pages/Reports';
 import { nativeKitchenAction } from './nativeKitchen';
+import { prepareKitchenAudio } from './kitchenAudio';
 
 export function StaffAuth() {
   const [user, setUser] = useState<StaffAccount | null>(null),
@@ -126,6 +127,7 @@ function Login() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
+    prepareKitchenAudio();
     setBusy(true);
     setError('');
     try {
@@ -391,10 +393,16 @@ export function StoreWorkspace({ reports = false }: { reports?: boolean }) {
   return (
     <StaffStoreContext.Provider value={{ id, role, request }}>
       <MenuProvider key={id + ':' + user!.id} endpoint={'/staff/stores/' + id + '/menu'}>
-        <div className={'container' + (!reports ? ' staff-kitchen-identity' : '')}>
-          <StaffTop />
-        </div>
-        {reports ? <StoreReports /> : <Kitchen key={id + ':' + user!.id} />}
+        {reports ? (
+          <>
+            <div className="container">
+              <StaffTop />
+            </div>
+            <StoreReports />
+          </>
+        ) : (
+          <Kitchen key={id + ':' + user!.id} accountMenu={<StaffTop />} />
+        )}
       </MenuProvider>
     </StaffStoreContext.Provider>
   );

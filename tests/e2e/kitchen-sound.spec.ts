@@ -47,7 +47,7 @@ test('kitchen plays the selected local recording with default sound and mute/rel
   expect(await page.evaluate(() => (window as any).__kitchenAudio.starts)).toBe(0);
   // Any ordinary kitchen action activates audio: no explicit sound toggle needed.
   await page.getByRole('button', { name: 'Обновить кухню', exact: true }).click();
-  await expect(sound).toHaveText('Остановить оповещения');
+  await expect(sound).toHaveText('Звук включён');
   const now = new Date().toISOString();
   orders = [
     {

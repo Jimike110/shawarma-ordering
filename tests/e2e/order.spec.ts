@@ -37,6 +37,7 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
   await kitchen.getByLabel('Пароль', { exact: true }).fill(password!);
   await kitchen.getByRole('button', { name: 'Войти', exact: true }).click();
   await expect(kitchen.getByRole('heading', { name: 'Кухня', exact: true })).toBeVisible();
+  await expect(kitchen.locator('[data-kitchen-sound]')).toHaveText('Звук включён');
   const card = kitchen.locator('.kitchen-order').filter({ hasText: '№' + number });
   await expect(card).toBeVisible({ timeout: 12000 });
   await card.getByRole('button', { name: 'Начать готовить' }).click();
@@ -54,6 +55,7 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
   await expect(page.locator('.receipt-line')).toContainText('Классическая');
   const privateResponse = await page.request.get('/api/orders/' + number);
   expect(privateResponse.status()).toBe(404);
+  await kitchen.getByLabel('Управление кухней', { exact: true }).click();
   await kitchen.getByRole('button', { name: 'Пауза', exact: true }).click();
   await kitchen.getByLabel('Причина паузы').fill('Проверка интерфейса');
   await kitchen.getByRole('button', { name: 'Приостановить', exact: true }).click();
@@ -62,8 +64,9 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
     page.getByRole('status').filter({ hasText: 'Приём заказов временно' }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'В корзину: Классическая' })).toBeDisabled();
+  await kitchen.getByLabel('Управление кухней', { exact: true }).click();
   await kitchen.getByRole('button', { name: 'Возобновить' }).click();
-  await kitchen.getByRole('button', { name: 'Меню', exact: true }).click();
+  await kitchen.getByLabel('Раздел кухни', { exact: true }).selectOption('menu');
   const product = kitchen.locator('.staff-product').filter({ hasText: 'Классическая' });
   await product.getByRole('button', { name: 'Изменить' }).click();
   await kitchen.getByLabel('Цена, ₽').fill('315');
@@ -79,7 +82,7 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
   await kitchen.getByLabel('Цена, ₽').fill('290');
   await kitchen.getByLabel('Доступен для заказа').check();
   await kitchen.getByRole('button', { name: 'Сохранить', exact: true }).click();
-  await kitchen.getByRole('button', { name: 'Заказы', exact: false }).click();
+  await kitchen.getByLabel('Раздел кухни', { exact: true }).selectOption('orders');
   await kitchen
     .locator('.kitchen-order')
     .filter({ hasText: '№' + number })
@@ -87,6 +90,7 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
     .click();
   await page.goto(trackURL);
   await expect(page.getByRole('heading', { name: 'Приятного аппетита!' })).toBeVisible();
+  await kitchen.getByLabel('Управление кухней', { exact: true }).click();
   await kitchen.getByRole('button', { name: 'Выйти', exact: true }).click();
   await expect(kitchen.getByRole('button', { name: 'Войти', exact: true })).toBeVisible();
   await kitchenContext.close();

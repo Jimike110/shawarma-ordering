@@ -125,7 +125,7 @@ test('mobile kitchen shortcuts persist ETA, availability, and weekly settings', 
       await page.screenshot({ path: `artifacts/admin-orders-${width}.png`, fullPage: true });
     }
     await page.setViewportSize({ width: 320, height: 844 });
-    await page.getByRole('button', { name: 'Меню', exact: true }).click();
+    await page.getByLabel('Раздел кухни', { exact: true }).selectOption('menu');
     const availability = page.getByRole('switch', { name: 'В продаже: ' + original.name });
     await availability.click();
     await expect(availability).toHaveAttribute('aria-checked', 'false');
@@ -146,7 +146,7 @@ test('mobile kitchen shortcuts persist ETA, availability, and weekly settings', 
     await fits(page);
     await page.screenshot({ path: 'artifacts/admin-product-320.png', fullPage: true });
     await page.getByRole('button', { name: 'Закрыть', exact: true }).click();
-    await page.getByRole('button', { name: 'Настройки', exact: true }).click();
+    await page.getByLabel('Раздел кухни', { exact: true }).selectOption('settings');
     await page
       .getByRole('group', { name: 'Базовое время приготовления', exact: true })
       .getByRole('button', { name: '5 мин', exact: true })

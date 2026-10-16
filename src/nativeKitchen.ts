@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface NativeKitchenState {
   monitoring: boolean;
@@ -27,6 +27,7 @@ export function nativeKitchenAction(
 }
 export function useNativeKitchen() {
   const native = isNativeKitchen();
+  const started = useRef(false);
   const [state, setState] = useState<NativeKitchenState>({
     monitoring: false,
     audio_ready: false,
@@ -42,8 +43,16 @@ export function useNativeKitchen() {
       try {
         const next = JSON.parse(event.data);
         if (next.revoked === true) window.dispatchEvent(new Event('staff-session-expired'));
-        if (typeof next.monitoring === 'boolean' && typeof next.authenticated === 'boolean')
+        if (typeof next.monitoring === 'boolean' && typeof next.authenticated === 'boolean') {
           setState(next);
+          // Start once when the restricted store credential is ready, including
+          // older APKs that finish binding after the login response. A deliberate
+          // stop later in this visit must stay stopped.
+          if (next.authenticated && !next.revoked && !started.current) {
+            started.current = true;
+            if (!next.monitoring) nativeKitchenAction('start');
+          }
+        }
       } catch {
         /* Keep the last valid native health state. */
       }

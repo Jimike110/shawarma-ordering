@@ -85,8 +85,23 @@ test('owner approves shared devices, tablets retain access and rotation revokes 
       );
       if (width >= 800)
         await expect(page.locator('.kitchen-lane')).toHaveCount(width >= 1100 ? 3 : 2);
+      await expect(page.getByLabel('Раздел кухни', { exact: true })).toBeVisible();
+      await expect(page.locator('.kitchen-tabs, .new-orders-notice, .queue-stats')).toHaveCount(0);
+      if (width >= 800) {
+        await expect.poll(async () => {
+          const area = await page.locator('.kitchen-board').boundingBox();
+          return area ? area.height / 800 : 0;
+        }).toBeGreaterThan(0.7);
+      }
       await page.screenshot({ path: `artifacts/trial/kitchen-${width}.png`, fullPage: false });
     }
+    await page.setViewportSize({ width: 1024, height: 600 });
+    await expect.poll(async () => {
+      const area = await page.locator('.kitchen-board').boundingBox();
+      return area ? area.height / 600 : 0;
+    }).toBeGreaterThan(0.65);
+    await page.screenshot({ path: 'artifacts/trial/kitchen-1024-landscape.png' });
+    await page.setViewportSize({ width: 1440, height: 800 });
     const newLane = page.locator('.kitchen-lane-new .kitchen-lane-list');
     await newLane.evaluate((e) => {
       e.scrollTop = 180;
@@ -190,7 +205,7 @@ test('canonical topping editor exposes both offers and the customer sees price, 
   const dish = await dishResponse.json();
   await page.context().addCookies((await request.storageState()).cookies);
   await page.goto('/staff/stores/1');
-  await page.getByRole('button', { name: 'Меню', exact: true }).click();
+  await page.getByLabel('Раздел кухни', { exact: true }).selectOption('menu');
   await page.getByRole('button', { name: 'Новая добавка', exact: true }).click();
   const editor = page.getByRole('dialog', { name: 'Новая добавка', exact: true });
   await editor.getByLabel('Название', { exact: true }).fill(name);

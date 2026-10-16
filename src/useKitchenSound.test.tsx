@@ -1,6 +1,8 @@
 import { act, fireEvent, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useKitchenSound } from './useKitchenSound';
+import { prepareKitchenAudio } from './kitchenAudio';
+import { StrictMode } from 'react';
 
 let permitted = true;
 let contexts: FakeAudio[];
@@ -102,6 +104,21 @@ it('starts enabled and plays new-order alerts without the sound toggle', async (
   act(() => hook.result.current.alert());
   expect(contexts[0].start).toHaveBeenCalledTimes(1);
   hook.unmount();
+  await flush();
+  expect(contexts[0].close).toHaveBeenCalledOnce();
+});
+it('keeps audio unlocked by the login gesture through async login and development remounts', async () => {
+  prepareKitchenAudio();
+  expect(contexts).toHaveLength(1);
+  permitted = false; // The request has completed and its user gesture has ended.
+  const hook = renderHook(() => useKitchenSound(), { wrapper: StrictMode });
+  await flush();
+  expect(contexts).toHaveLength(1);
+  expect(hook.result.current.ready).toBe(true);
+  act(() => hook.result.current.setPending(true));
+  expect(contexts[0].start).toHaveBeenCalledOnce();
+  hook.unmount();
+  await flush();
   expect(contexts[0].close).toHaveBeenCalledOnce();
 });
 it('keeps an alert while autoplay is blocked and delivers it once after a normal gesture', async () => {
@@ -171,11 +188,12 @@ it('keeps an alert until the file finishes loading and retries failed audio down
 it('reports audio failures without crashing and safely reopens after StrictMode cleanup', async () => {
   const hook = renderHook(() => useKitchenSound(), { reactStrictMode: true });
   await flush();
-  expect(contexts[0].close).toHaveBeenCalledOnce();
+  expect(contexts).toHaveLength(1);
   act(() => hook.result.current.alert());
-  expect(contexts[1].start).toHaveBeenCalledOnce();
+  expect(contexts[0].start).toHaveBeenCalledOnce();
   hook.unmount();
-  expect(contexts[1].close).toHaveBeenCalledOnce();
+  await flush();
+  expect(contexts[0].close).toHaveBeenCalledOnce();
   vi.stubGlobal(
     'AudioContext',
     class {

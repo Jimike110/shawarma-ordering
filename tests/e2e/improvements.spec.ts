@@ -224,7 +224,7 @@ test('staff edit shop information and options; kitchen shows new and overdue ord
     await page.getByLabel('Пароль', { exact: true }).fill(password!);
     await page.getByRole('button', { name: 'Войти', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Кухня', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Меню', exact: true }).click();
+    await page.getByLabel('Раздел кухни', { exact: true }).selectOption('menu');
     await page
       .locator('.staff-product')
       .filter({ hasText: 'Классическая' })
@@ -239,7 +239,7 @@ test('staff edit shop information and options; kitchen shows new and overdue ord
     const saved = (await (await request.get('/api/menu')).json()).products[0];
     expect(saved.ingredients).toBe('Тестовый состав из панели');
     expect(saved.options[0].label).toBe('Без соуса');
-    await page.getByRole('button', { name: 'Настройки', exact: true }).click();
+    await page.getByLabel('Раздел кухни', { exact: true }).selectOption('settings');
     await page.getByLabel('Телефон', { exact: true }).fill('+7 000 000-00-00');
     await page.getByLabel('Ссылка на карту', { exact: true }).fill('https://example.com/test-map');
     await page.getByLabel('Принимать заказы по расписанию').check();
@@ -255,8 +255,8 @@ test('staff edit shop information and options; kitchen shows new and overdue ord
     expect(settings.phone).toBe('+7 000 000-00-00');
     await page.screenshot({ path: 'artifacts/kitchen-settings.png', fullPage: true });
     await mutate(request, 'settings', originalSettings);
-    await page.getByRole('button', { name: /Заказы/ }).click();
-    await expect(page.locator('.queue-refresh')).toContainText('Обновлено');
+    await page.getByLabel('Раздел кухни', { exact: true }).selectOption('orders');
+    await expect(page.locator('.kitchen-connection')).toContainText('На связи');
     await page.clock.setFixedTime(new Date(Date.now() + 150 * 60000));
     const created = await request.post('/api/orders', {
       headers: { Origin: origin },
@@ -270,7 +270,7 @@ test('staff edit shop information and options; kitchen shows new and overdue ord
     });
     expect(created.ok()).toBe(true);
     const customerOrder = await created.json();
-    await expect(page.locator('.new-orders-notice')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.kitchen-new-count b')).not.toHaveText('0', { timeout: 15000 });
     const card = page.locator('.kitchen-order').filter({ hasText: '№' + customerOrder.number });
     await expect(card).toHaveClass(/overdue/);
     await page.screenshot({ path: 'artifacts/kitchen-queue.png', fullPage: true });

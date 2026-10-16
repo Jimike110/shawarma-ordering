@@ -68,7 +68,7 @@ Current customer tracking has **no sound or vibration**. Background push/SMS is 
 
 Use the actual CSS viewport/display scaling on the Teclast, not physical pixels. At 1100+ CSS pixels show three independently scrolling lanes with sticky counts; at 800–1099 keep new orders beside a preparation/ready pane; below 800 use one queue with status filters. Use 56px primary targets and approximately 18px operational text. Keep address, intake, connection and monitoring visible. Quantities, toppings/portions, comments and ETA precede the primary action. Custom ETA and destructive actions use accessible sheets; polling must preserve scroll/focus.
 
-Phones have three stable bottom destinations: Orders, Menu and Settings. Reserve bottom/safe-area padding. Larger screens use ordinary navigation and compact queue columns.
+Kitchen navigation uses one top dropdown for **Заказы / Меню / Настройки** on every viewport. Keep one pickup address and the actionable new-order count in that top bar. Put account actions, pause controls and sound checks in the labelled controls menu; retain visible intake, connection and sound state. Do not add duplicate counters or fixed bottom navigation. Tablet queues measure the remaining viewport height rather than reserving a fixed header allowance.
 
 Orders show status, number, purchased items, permitted personal fields, ETA and total before actions. Queue counters filter status, and overdue/new-order notices remain visible.
 
@@ -82,7 +82,7 @@ Orders show status, number, purchased items, permitted personal fields, ETA and 
 | Product deletion | Management permission, explicit destructive confirmation |
 | Pause/resume | Narrow operational update; cannot override owner stop |
 
-Browser kitchen sound defaults on per visit and repeats while any confirmed/last-known order is new. Distinguish active, explicitly stopped and browser-blocked/loading states. Stopping monitoring leaves a persistent warning and never saves a permanent silent preference. Inside Android, native audio is the sole engine and background monitoring is explicit. Neither UI claims guaranteed audible delivery; volume, power, network and real-device checks remain necessary.
+Browser kitchen sound defaults on per visit and uses the login gesture to unlock audio before asynchronous authentication completes. Alerts repeat while any confirmed/last-known order is new. Distinguish active, explicitly stopped and browser-blocked/loading states. Stopping monitoring leaves a persistent warning and never saves a permanent silent preference. Inside Android, native audio is the sole engine; entering an authenticated shared kitchen starts monitoring once permissions and the initial speaker check are satisfied. A deliberate stop remains effective for that visit. Neither UI claims guaranteed audible delivery; volume, power, network and real-device checks remain necessary.
 
 ## Owner workspace
 
