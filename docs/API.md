@@ -1,97 +1,211 @@
-# API
+# API reference
 
-All routes use `/api`. JSON requests require `Content-Type: application/json`. Responses use `Cache-Control: no-store`. Monetary values are integer rubles; payment is at pickup. Error bodies are `{ "error": "Customer-readable message" }`.
+The same Go handler is used by the standalone server and Netlify adapter. Route registration in [api.go](../backend/internal/app/api.go) is the authoritative list.
 
-| Method and route           | Access                    | Purpose                                          |
-| -------------------------- | ------------------------- | ------------------------------------------------ |
-| GET /health                | Public                    | Database-aware health                            |
-| GET /menu                  | Public                    | Products, settings, intake state and estimate    |
-| POST /orders               | Public, rate-limited      | Transactional checkout                           |
-| GET /orders/{token}        | Private bearer link       | Status, receipt, total, ETA, cancellation reason |
-| GET /stores | Public | Published pickup points |
-| GET /stores/{slug}/menu | Public | Store-specific catalogue |
-| POST /auth/login | Credentials, rate-limited | Individual staff login |
-| GET /auth/me | Staff | Current identity and assignments |
-| POST /auth/logout | Staff | Revoke session |
-| POST /auth/change-password | Staff | Confirm current password and replace it |
-| POST /auth/reauthenticate | Staff | Confirm password for sensitive actions |
-| /staff/stores/{storeId}/* | Assigned role or owner | Scoped kitchen, menu and reports |
-| /owner/* | Owner | Accounts, stores, copying and combined reports |
+All routes below include `/api`. JSON bodies require `Content-Type: application/json`. The decoder rejects unknown fields, extra JSON values and bodies over 32 KiB. Responses are JSON with `Cache-Control: no-store`.
 
-Legacy `/kitchen/*` aliases remain bound to store 1 and enforce the same current permissions. Products/settings writes require manager/owner; workers use narrow `PATCH .../products/{id}/availability` and `PATCH .../operations` payloads. Every resource lookup includes its store constraint. Manager-only store suffixes include `history`, `analytics` and `activity`. Owner endpoints include `stores`, `users`, `users/{id}/reset-password`, `menu-copy`, `orders`, `analytics` and `activity`.
+Prices are integer rubles. Timestamps are ISO/RFC3339 values; use Moscow time for business-date reporting.
 
-Owner `orders`, `activity` and `analytics` accept an optional positive `store_id`; unknown stores return 404 and malformed IDs return 400. Filtering happens before cursor pagination (`before` on orders/activity). Staff-scoped report routes always retain the authorized path store, ignoring attempts to override it through query parameters.
+## Authentication and errors
 
-Store objects include `intake_blockers`, an array of independent codes: `archived`, `unpublished`, `privacy_unpublished`, `owner_stopped`, `paused`, `outside_hours`. Several may apply at once. Existing `accepting_orders` and `intake_message` remain authoritative compatibility fields; explanations do not change intake enforcement.
+Staff authentication uses the HttpOnly `staff_session` cookie, scoped to `/api`, SameSite=Strict and Secure on HTTPS. Send cookies with same-origin requests. Staff mutations/login require `Origin` to equal `PUBLIC_ORIGIN` exactly.
 
-## Menu and products
+| Status | Meaning |
+| --- | --- |
+| 400 | Invalid payload, field or query parameter |
+| 401 | Missing/expired login or invalid credentials |
+| 403 | Wrong origin, insufficient role/store, temporary-password restriction or recent-password requirement |
+| 404 | Missing resource/route, or no published privacy document |
+| 409 | State, retry, menu, privacy-version or concurrent-edit conflict |
+| 410 | Expired private receipt or unavailable expired-order content |
+| 415 | Request body is not JSON |
+| 429 | Throttled; respect `Retry-After` |
+| 500/503 | Internal/dependency failure; do not treat an ambiguous checkout result as rejected |
 
-`GET /menu` returns `products`, `settings`, `accepting_orders`, `intake_message`, and `estimated_minutes`. The server evaluates the opening schedule and manual pause, and estimates preparation time from the configured base and active queue, capped at 120 minutes. Use the server intake fields rather than independently interpreting local browser time.
+Errors normally have `{"error":"Russian explanation"}`. Some 403 responses also have `code`: `reauthentication_required` or `password_change_required`.
 
-Product fields: `id`, `name`, `description`, `price`, `image`, `weight`, `category`, `available`, `sort_order`, `ingredients`, `allergens`, and `options`. An option is `{ "id": "extra-cheese", "label": "Дополнительный сыр", "price": 50 }`. Up to 12 independent options may be selected; price zero represents a free change. Preserve stable option IDs when editing labels/prices. Images accept `/images/...` paths or HTTPS URLs.
+For recent-password confirmation, POST `{"password":"…"}` to `/api/auth/reauthenticate`, then resume the original sensitive action once. Confirmation lasts five minutes. Do not generate a different action target/payload while resuming.
 
-Ingredient/allergen strings may be empty when unknown. The frontend explicitly states that the information needs confirmation. Do not infer food safety information from photos or product names.
+## Public routes
 
-## Checkout and private tracking
+| Method | Route | Result |
+| --- | --- | --- |
+| GET | `/api/health` | PostgreSQL ping: `{"status":"ok"}` or unavailable |
+| GET | `/api/stores` | Published, nonarchived pickup stores |
+| GET | `/api/stores/{slug}/menu` | Store catalogue, settings and intake |
+| GET | `/api/menu` | Legacy original-store catalogue |
+| POST | `/api/orders` | Submit/retry a guest order |
+| GET | `/api/orders/{token}` | Private status and receipt |
+| GET | `/api/privacy` | Current published policy and consent |
+| GET | `/api/privacy/versions/{id}` | An immutable published version |
+
+A menu response includes `products`, `settings`, `store`, `accepting_orders`, `intake_message`, `estimated_minutes` and `privacy_ready`. Use server intake/estimate fields rather than recomputing them from browser time.
+
+Store responses may contain multiple `intake_blockers`: `archived`, `unpublished`, `privacy_unpublished`, `owner_stopped`, `paused`, `outside_hours`. Do not assume lifting one clears all others.
+
+### Checkout
+
+Example for a number-only order; replace product/price/document IDs with the values actually displayed:
 
 ```json
 {
-  "name": "Михаил",
-  "note": "Позвоню при получении",
+  "store_id": 1,
+  "name": "",
+  "note": "",
   "request_key": "11111111-1111-4111-8111-111111111111",
-  "items": [{ "product_id": 1, "quantity": 2, "expected_price": 340, "options": ["extra-cheese"] }]
+  "items": [
+    {"product_id": 1, "quantity": 2, "expected_price": 290, "options": []}
+  ],
+  "privacy": {"notice_version": 1, "consent_version": 0, "accepted": false}
 }
 ```
 
-`expected_price` is the unit price including extras. The server calculates totals from the database. Different option combinations are separate lines. Limits: 20 items per variant, 50 total, 30 distinct lines, name 1–60 characters, note up to 500 characters. Duplicate variants or option IDs are rejected. A request key is 32–80 alphanumeric/hyphen characters.
+`expected_price` is the unit price including selected extras. Go recomputes totals from current product data before acceptance.
 
-Include `store_id` in checkout and freeze it with the submitted payload and retry key after an ambiguous result. Omitting it anchors legacy requests to original store 1; using a retry key at a different store returns 409. Tracking includes the original pickup-location snapshot. Freeze the submitted payload and reuse its exact request key after an ambiguous result. Identical retries return the existing order, including after intake closes or prices change. Reusing a key with different content returns 409. Preserve pending attempts after network errors and 429; a new key can produce a duplicate order. A 409 also indicates stale prices, unavailable products/options, or closed intake; refresh menu state before another order.
+| Field/constraint | Rule |
+| --- | --- |
+| `store_id` | Positive target ID; omission/zero is legacy original store 1 |
+| `name` | Optional; trimmed; at most 60 Unicode characters |
+| `note` | Optional; trimmed; at most 500 Unicode characters |
+| `request_key` | 32–80 ASCII letters/digits/hyphens |
+| Basket | 1–30 distinct variant lines, up to 20 units each, 50 total units |
+| Selected options | At most 12 unique IDs per line; known product options only |
+| Optional fields | Any entered name/note requires accepted separate consent for the current displayed version |
 
-Checkout and product edits lock their store row, making pause, availability, and price checks atomic. Order items retain purchased names, unit prices, and option labels/prices after staff edits.
+Current clients must submit `privacy.notice_version`. If optional fields are entered, set `accepted=true` and `consent_version` to the published version accepted by the customer. Never check consent automatically.
 
-A private token is a 256-bit HMAC derived from the request key and server secret; only its SHA-256 hash is stored. Checkout returns the token. Tracking uses `/track#TOKEN`; its API request uses `/api/orders/TOKEN`. Public tracking excludes customer name/note, internal ID, and token. Sequential order numbers cannot retrieve orders. Do not log bearer URLs or expose private links in screenshots/reports. The nginx API location suppresses URL access/error logs.
+**Freeze the entire submitted payload**, including store, prices, options and privacy versions, alongside its request key. After response loss, network errors or 429, retry that exact attempt.
 
-## Staff authentication and orders
+An accepted identical attempt is returned before today's intake, prices or policy are checked. Different content or another store with the same key conflicts. An expired replay marker must not create another order. Legacy accepted fingerprints remain supported; a new outdated client must refresh.
 
-Login body is `{ "username": "anna", "password": "..." }`. Accounts and per-store manager/worker assignments live in PostgreSQL; owners access every store. New passwords use Argon2id. Temporary passwords expire after 24 hours and allow only password change/session/logout until replaced. Account/password/assignment changes revoke sessions. Sensitive owner writes require confirmation within five minutes; a 403 with `code: "reauthentication_required"` prompts confirmation. Mutations record actor, store and changes transactionally without secrets. Bootstrap and recovery are administrative CLI operations; see the README upgrade steps.
+Checkout/product edits serialize on the store row. Orders retain purchased product/option names/prices and the pickup-location snapshot.
 
-Opaque 256-bit session tokens use hashed database storage and 12-hour expiry. The `staff_session` cookie is scoped to `/api`, HttpOnly, SameSite=Strict, and Secure on HTTPS. Staff mutations require an Origin matching `PUBLIC_ORIGIN`. Authentication/order limits persist across processes. For the private Docker API only, `TRUST_PROXY=true` trusts `X-Real-IP`, overwritten by nginx. Do not expose that API port directly. The Netlify adapter uses the provider's client IP.
+### Private links
 
-The kitchen list contains every active order, regardless of age, plus up to 300 orders completed/cancelled within the last 24 hours. Staff responses include internal IDs, names, and notes.
+The frontend link is `/track#TOKEN`; only the API request includes the bearer token in its path. The token is derived with the stable server key and only its hash is stored. Order numbers alone cannot retrieve receipts.
+
+Tracking excludes customer name/note, internal ID and bearer token. Staff responses may contain personal fields unless blocked/erased. Do not log bearer URLs or put private links in screenshots/support reports.
+
+After receipt expiry, tracking returns 410 and browser history can retain an honest expired entry. Clearing browser storage removes saved links; there is no customer account lookup.
+
+## Staff authentication
+
+| Method | Route | Body/purpose |
+| --- | --- | --- |
+| POST | `/api/auth/login` | `{"username":"anna","password":"…"}` |
+| GET | `/api/auth/me` | Identity, owner flag, account status and memberships |
+| POST | `/api/auth/logout` | Revoke current session |
+| POST | `/api/auth/change-password` | `{"current_password":"…","password":"…"}` |
+| POST | `/api/auth/reauthenticate` | Confirm current password for sensitive actions |
+
+Login limits apply to both client identity and username. Unknown, disabled and incorrect-password accounts share a public error. Normal sessions last 12 hours. Temporary-password sessions are restricted and shorter; the temporary password expires after 24 hours.
+
+Personal passwords allow 15–128 characters and use Argon2id. Imported bcrypt hashes remain verifiable until replaced. Password/access changes revoke existing sessions. Personal password change issues a replacement current session.
+
+## Store-scoped staff routes
+
+Prefix: `/api/staff/stores/{storeId}`.
+
+“Staff” below means an assigned worker/manager or an owner. Management means manager at that store or owner.
+
+| Method | Suffix | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/menu` | Staff | Store catalogue/settings |
+| GET | `/orders` | Staff | Active queue + up to 300 recently closed orders |
+| PATCH | `/orders/{id}` | Staff | Status/ETA/cancellation |
+| PATCH | `/operations` | Staff | Narrow shift controls |
+| PATCH | `/products/{id}/availability` | Staff | Availability only |
+| POST | `/products` | Management | Create product |
+| PUT | `/products/{id}` | Management | Replace editable product fields |
+| DELETE | `/products/{id}` | Management | Permanent removal, preserving receipts |
+| PUT | `/settings` | Management | Replace editable settings |
+| GET | `/history` | Management | Paginated full retained history |
+| GET | `/analytics` | Management | Store report |
+| GET | `/activity` | Management | Store activity |
+
+`GET /api/staff/stores` lists stores available to the current account. Resource IDs are always constrained by the authorized path store. Query parameters cannot override staff scope. Archived stores remain readable where authorized; store mutations are refused.
+
+### Order and operational payloads
 
 ```json
-{ "status": "preparing", "eta_minutes": 22 }
+{"status":"preparing","eta_minutes":15}
 ```
 
-Both fields are optional. ETA is 1–120 minutes from update time. Transitions follow `new → preparing → ready → completed`; an active order may become `cancelled`. Terminal orders cannot reopen. Conflicts return 409 and require a refresh.
+Fields are optional. ETA is 1–120 minutes from now. Valid transitions are `new → preparing → ready → completed`; active orders may become `cancelled`. Repeating a status does not create a transition. Terminal orders cannot reopen.
 
-Cancellation body:
+Cancellation requires `{"status":"cancelled","cancellation_reason":"Reason shown to the guest"}`; the reason must be nonempty and no longer than 300 characters.
 
-```json
-{ "status": "cancelled", "cancellation_reason": "Сегодня закончился сыр." }
-```
+Operational PATCH fields: `paused`, `prep_minutes`, `reason`. A pause needs a reason. Availability PATCH is `{"available":false}`. Unknown/restricted fields are rejected; workers cannot use these requests to edit prices or owner stops.
 
-The reason is customer-visible, up to 300 characters, and only accepted with cancellation. Both the UI and API require a nonempty cancellation reason.
+### Products and settings
 
-## Shop settings
+Products use `name`, `description`, `price`, `image`, `weight`, `category`, `available`, `sort_order`, `ingredients`, `allergens`, `options`.
 
-Send the complete settings object on PUT, preserving fields you are not changing:
+An option is `{"id":"extra-cheese","label":"Дополнительный сыр","price":50}`. Preserve stable IDs when changing text/prices. Images accept local `/images/…` or HTTPS paths. Unknown composition fields may stay empty.
 
-```json
-{
-  "paused": false,
-  "prep_minutes": 15,
-  "pause_message": "",
-  "shop_name": "Я люблю шаверму",
-  "address": "Белорусская ул., 4",
-  "city": "Санкт-Петербург",
-  "phone": "",
-  "hours_note": "",
-  "map_url": "",
-  "schedule_enabled": true,
-  "demo_mode": true,
-  "opening_hours": [{ "day": 1, "open": "09:00", "close": "22:00" }]
-}
-```
+Settings use `paused`, `prep_minutes`, `pause_message`, `shop_name`, `address`, `city`, `phone`, `hours_note`, `map_url`, `schedule_enabled`, `demo_mode` and `opening_hours`.
 
-`day` is 0 Sunday through 6 Saturday. Times use Moscow time and `HH:mm`. Each day appears at most once; equal opening/closing times are invalid. Closing earlier than opening represents an overnight shift ending the next day. Manual pause overrides the schedule. Disabled scheduling means manual intake; enabled scheduling with an empty list closes intake. The example contains Monday only; `config/shop.json` contains the confirmed daily schedule. Map links require HTTPS. Keep `demo_mode` true until actual products/prices/photos have been confirmed.
+An hours entry is `{"day":1,"open":"09:00","close":"22:00"}`: Sunday=0, Saturday=6, Moscow time, one entry per day. Equal open/close is invalid; earlier closing means overnight. Enabled empty hours close intake; disabled scheduling leaves manual controls.
+
+PUT clients should preserve fields they are not intentionally changing.
+
+## Owner routes
+
+All require an owner session. **R** additionally requires recent password confirmation.
+
+| Method | Route | R | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/owner/stores` | | Store states/counts |
+| POST | `/api/owner/stores` | Yes | Create unpublished store |
+| PATCH | `/api/owner/stores/{id}` | Yes | Publish/archive/owner stop |
+| GET | `/api/owner/users` | | All accounts |
+| POST | `/api/owner/users` | Yes | Create account and temporary password |
+| PUT | `/api/owner/users/{id}` | Yes | Update account/access |
+| POST | `/api/owner/users/{id}/reset-password` | Yes | Issue replacement temporary password |
+| POST | `/api/owner/menu-copy` | Yes | Retry-safe independent menu copy |
+| GET | `/api/owner/orders` | | Retained order history |
+| GET | `/api/owner/analytics` | | Combined/store report |
+| GET | `/api/owner/activity` | | Business/store activity |
+
+Store creation: `slug`, `name`, `address`. Lifecycle PATCH: optional `published`, `archived`, `owner_stopped`, `reason`. Archival conflicts while active orders remain.
+
+Account input: `username`, `display_name`, optional `phone`/`email`, `owner`, `active`, and the complete `memberships` array of `{"store_id":1,"role":"worker"}`. Send every assignment, including ones hidden by a UI filter. Creation/reset returns a one-time `temporary_password`; existing passwords are never returned. Resetting one's own password uses the personal-password endpoint instead.
+
+Menu copy: `source_store_id`, `destination_store_id`, `product_ids`, `request_key`. Copies create new unavailable products and do not synchronize menus.
+
+### Reporting queries
+
+Owner reports/history/activity accept positive `store_id`; omit it for all stores. Invalid values are 400, unknown stores 404. Filtering precedes pagination.
+
+History/activity use a positive `before` cursor, newest first, up to 100 records. History also accepts `status`.
+
+Analytics accepts inclusive `from`/`to` dates in `YYYY-MM-DD`, defaulting to the last seven Moscow dates; the allowed start/end distance is at most 365 days. Metrics group orders by creation date. Values and timing sums/sample counts combine retained orders with archived aggregates. Missing historical timings are not invented.
+
+## Privacy administration
+
+Owner-only, with recent password confirmation where marked.
+
+| Method | Route | R | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/owner/privacy` | | Draft, published version and previews |
+| PUT | `/api/owner/privacy/draft` | Yes | Save `{revision,draft}` |
+| POST | `/api/owner/privacy/publish` | Yes | Publish saved `{revision}` |
+| GET | `/api/owner/privacy/retention` | | Preview/activation state |
+| POST | `/api/owner/privacy/retention` | Yes | `{enabled,previewed}`; explicit activation |
+| GET/POST | `/api/owner/privacy/requests` | Yes | List/create rights cases |
+| POST | `/api/owner/privacy/requests/{id}` | Yes | Verified case action |
+| GET | `/api/owner/privacy/destructions` | Yes | Paginated destruction-log extract |
+
+Operator fields: `kind` (`company`/`ip`), `legal_name`, `inn`, `registration`, `address`, `contact` (email), `contractors`, `locations`, `staff_basis`, `approved`. Publishing validates completeness and the saved revision. Editing does not change immutable published versions.
+
+Create a case with `store_id`, exactly one of `order_id`/`order_number`, and `kind`: `access`, `correction`, `withdrawal`, `erasure`, `dispute`.
+
+Actions are `verify`, `export`, `block`, `correct`, `erase`, `resolve`. Verification accepts `personal_link_and_purchase`, `in_person` or `existing_contact`. Other actions require a verified case. Correction supplies `name`/`note` and cannot restore an erased/expired purpose. Request listing uses `before` with up to 200 entries. Destruction listing uses `after` event IDs and returns its next cursor.
+
+These endpoints do not verify identity automatically, send correspondence, install a scheduler or sign statutory acts. See [privacy operations](../PRIVACY_OPERATIONS.md).
+
+## Legacy compatibility
+
+`/api/kitchen/login`, `logout` and `session` alias current authentication. Kitchen order/product/settings aliases remain anchored to original store 1 and enforce current permissions, including DELETE.
+
+Legacy public checkout/menu requests stay anchored to store 1. Compatibility is not an authorization bypass. New integrations should use the current store-aware routes.

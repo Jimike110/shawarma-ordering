@@ -1,60 +1,123 @@
-# Interface and design principles
+# Interface and interaction design
 
-## Direction
+The application should feel familiar to Russian pickup-food customers and practical for staff working a shift. Ordering references include Rostic's, Yandex Go/Yandex Eats and Вкусно — и точка. Use their clarity and interaction patterns as inspiration, not their branding or proprietary assets.
 
-The user asked for a familiar Russian food-ordering experience, referencing Rostic's, Yandex Go / Yandex Eats, and Вкусно — и точка, with typography similar to Wildberries careers. Treat these as interaction and hierarchy references: food comes first, prices are clear, the basket is easy to reach, and checkout makes the fulfilment method obvious. Keep this shop's own name, content, and colours. Do not copy reference brands' logos, promotional offers, photos, or proprietary design assets. The user's separately supplied shop-menu listing is the authorized source for the actual food photos/prices.
+The product is pickup ordering for stores within one business. Design must not imply delivery, online payment, loyalty, AI, push alerts or other absent functionality.
 
-This is a **pickup app for stores within one business**. Do not add delivery switches, fake discounts, loyalty points, nutrition figures, or payment methods that the backend/shop does not support. Online payment is not available. The original store catalogue uses 19 real listing items, prices, portion sizes, and photos from the user-selected Yandex Maps source, checked on 2026-10-10. See [menu provenance and import](MENU_SOURCE.md).
+## Visual language
 
-## Typography and visual system
+- Load the bundled **Inter Variable** font from `/fonts/InterVariable.woff2`, including Cyrillic. A CSS family name without the font asset is insufficient. Provenance/license: [font credits](../public/fonts/CREDITS.md).
+- Use regular/medium body text and restrained semibold headings. Use tabular numbers for times, quantities and money.
+- White surfaces, pale grey backgrounds, dark text, subtle dividers and restrained red-orange primary actions.
+- Keep catalogue quantity controls neutral; reserve prominent colour for meaningful actions.
+- Use compact layouts and readable product photographs, not oversized marketing heroes or decorative dashboard metric tiles.
+- Pair status colours with text/icons. Avoid conveying availability or overdue state by colour alone.
+- Keep Russian UI labels direct; use rubles and Moscow dates/times consistently.
 
-- **Inter Variable**, served from `/fonts/InterVariable.woff2`. The [current RWB careers stylesheet](https://career.rwb.ru/assets/index-BGs2E8uH.css) declares Inter 24pt Regular/Medium/SemiBold/Bold. Our independently distributed open-source Inter uses optical size 24. License and provenance are in `public/fonts/`. The old CSS named Inter without loading it; avoid returning to a system-font-only implementation.
-- Regular/medium body and control text, restrained semibold titles, tabular digits for quantities/times/totals. Avoid making every title or label extra-bold.
-- White surfaces on pale neutral grey `#f5f5f7`, dark text `#222224`, warm red-orange action colour `#d63a1d`. A warm yellow pickup banner adds personality without a large marketing hero. Status colours communicate state alongside words/icons.
-- Use 8px-based spacing where practical, 12–20px surface radii, subtle dividers, and minimal shadows. Cards should look like a food catalogue, rather than a landing page or a collection of decorative dashboard tiles.
-- Keep titles short and direct: «Меню», «Оформление заказа», «Кухня». Avoid oversized slogans, upper-case eyebrow text on every section, decorative badges, and excessive negative letter spacing.
-- Images retain their real aspect/crop and open details. Product names stay readable; descriptions may clamp to two lines on catalogue cards, with full text in details. Ingredient/allergen information is never fabricated.
-- Food images are locally hosted Yandex XXL variants, approximately 61–265 KiB each. Keep the source URL and SHA-256 in `config/menu.json`; do not substitute stock/generated photos or rely on runtime Yandex hotlinks. Present the listed ruble price and portion size without fabricated discounts or inferred ingredient descriptions. Light name/case normalization is recorded alongside the original source names.
-- The pickup banner uses a current catalogue photo too; do not leave demonstration imagery in prominent shared surfaces after replacing the menu. Search appears for larger catalogues, with a separate icon gutter so its text/native clear control remain readable on phones and desktop.
+The font choice was inspired by the supplied Wildberries/RWB careers reference. The bundled font is independently licensed Inter, not a copied proprietary brand font.
 
-## Customer flow
+## Content accuracy
 
-1. A compact shop header shows the name and pickup-address dropdown on phones and desktop. Open the last selected published store by default, otherwise the first; stable store links open their own menu. Switching points preserves each store's basket and pending submission independently. Current intake state and preparation estimate appear above the catalogue. Categories and food appear near the top. Desktop uses three food cards plus a sticky basket; phones use two cards per row.
-2. Clicking a product photo/name opens a labelled native dialog: image, weight, description, optional independent extras, expandable ingredients/allergens, quantity, and an exact add-to-basket total. Phones use a sheet with a reachable sticky action row; desktop uses a two-column dialog. Escape restores focus to the opener.
-3. Quick card additions select the base product. Product details are where customers choose extras. Quantities of different option combinations remain independent. A one-item card becomes a stepper; the whole order still respects 20 items per variant, 50 items total, and 30 distinct lines.
-4. On desktop, the basket stays beside the menu. On phones/tablets, a bottom bar shows count/total and opens the basket sheet. Every basket line can be decreased or removed when intake closes or a product becomes unavailable.
-5. Checkout separates **Получение**, **Ваши данные**, and **Оплата**. Pickup and payment at collection are clearly selected. Guest name and comment are optional. A visible receipt allows review and quantity changes; desktop submission is in the summary, mobile submission stays at the bottom.
-6. Submitting freezes the exact order. Preserve the same payload/request key through timeout, response loss, 429, and reload. Pending attempts cannot be edited and must not become a new order just because the interface has changed. Definite validation/conflict responses allow correction.
+Use locally hosted shop photos whose sources/checksums are recorded in [the menu manifest](../config/menu.json). Do not replace them with generated food, stock photography or runtime Yandex hotlinks.
 
-7. **Мои заказы** is a separate `/orders` page showing every order still saved in this browser, newest first. The catalogue only includes a compact shortcut/count, even with a large history. Keep the shortcut available when history is empty; the history page then offers a clear menu action. Direct URLs/reloads work, old `/#orders` anchors redirect here, and tracking provides “Все мои заказы”. Recover missing metadata on this page rather than fetching old orders just to render the home count. Each link uses its actual order number and Moscow date/time (including the year). Recover missing numbers/dates from legacy token-only entries through their private endpoint; use «Заказ по личной ссылке» if recovery is unavailable. Never call an arbitrary unnumbered entry «Последний заказ». Successful tracking visits also save the link, without promoting an old order above newer orders. Keep the browser/device scope explicit; this is not an account or a list of other customers' orders.
+Prices/photos/portions are a dated import, not a live integration. Current database edits override setup assumptions. Never invent promotions, ingredients, allergens, nutrition, phone numbers or guaranteed preparation times.
 
-Keep private tracking, complete local order history, server-calculated prices, historic receipts, and Moscow timestamps intact during visual changes. Never discard history because a request fails, cap it at five entries, or attach a previous tracking response to a different private link. Clearing browser storage removes saved links; orders already discarded by the old cap require their original personal link to be restored.
+Unknown composition/allergen information should be visibly unconfirmed, not inferred from a product name or photo.
 
-## Kitchen on a phone
+## Customer ordering
 
-- Mobile bottom navigation has three stable destinations: **Заказы**, **Меню**, **Настройки**. Desktop uses ordinary tabs. The active destination has both visual and accessible state; fixed controls reserve space for safe areas and content.
-- Orders are one column on phones, two on tablets, three on desktop. Guest names, item options/notes, current status, ready time, and total precede actions. New-order notices and overdue markers remain visible.
-- Preparation shortcuts **5 / 10 / 15 / 20 / 30 мин** on an order apply immediately, using the same validated API as manual entry. Disable controls during the request and announce success/error. The separate custom input accepts 1–120 minutes and requires «Применить».
-- Settings preparation presets only change the draft. Staff must choose **Сохранить настройки** to persist the whole form. Never silently save other dirty fields when a shortcut is clicked.
-- Queue counters for new/preparing/ready orders act as filters. Cancellation reason suggestions prefill the input; they never cancel without the explicit confirmation action.
-- Menu availability is a labelled switch for each product, avoiding opening a full editor for a stock change. Fetch current product fields before sending the full-object PUT. A failed request must not display an optimistic success.
-- Opening hours remain per-day editable; «Как в понедельник — на всю неделю» copies the Monday shift into the draft. Disabled scheduling and overnight hours retain their existing semantics. Copying does not auto-save.
-- Show unsaved settings state and keep the save action reachable above mobile navigation. Product options, day/time fields, and editor action rows must fit at 320px.
+### Catalogue and store selection
+
+The header contains the pickup-address dropdown. The root route opens the last available selection or a published fallback; stable `/s/:slug` links identify a store.
+
+Keep the selected address prominent through catalogue, basket and checkout. Switching stores preserves separate baskets without transferring products. Clear stale store data and abort obsolete requests.
+
+Food cards use two columns on phones. Desktop can show a larger grid with a sticky basket. Search and category navigation must remain easy to reach for longer menus.
+
+### Product details and basket
+
+Product details show the image, portion, price, optional extras, quantity and exact total. Expandable composition must not hide important uncertainty. Use a labelled dialog/sheet, reachable primary action, Escape handling and focus restoration.
+
+Variants are identified by product plus selected option IDs. Different variants have independent quantities. Limits match the API: 20 units per variant, 50 total units, 30 lines.
+
+The mobile basket opens from a fixed summary bar; desktop uses a visible summary. Leave safe-area/content padding so fixed controls never cover actions. Customers can reduce/remove items while intake is stopped.
+
+### Checkout and consent
+
+Group checkout into pickup, optional customer information and payment at collection. Guest name/comment are optional. Consent is separate, initially unchecked and unnecessary for number-only collection.
+
+If text needs consent, explain the missing action; do not silently discard it. Warn against health/payment/other people's personal information in preparation comments. Link policy/consent at collection points and in the footer.
+
+Submitting freezes the exact payload, store, document versions and retry key. Visual work must not alter retry behaviour after ambiguous failures.
+
+### Tracking and history
+
+Tracking uses a private link, shows actual statuses, the current estimate, pickup location and honest late/cancelled/completed states. A number alone never opens a receipt.
+
+`/orders` is the dedicated browser-history page. The catalogue shows only its shortcut/count, not an expanding list. Preserve every valid saved link, unavailable/expired entries and complete legacy-history migration. Never reintroduce a five-link limit.
+
+Current customer tracking has **no sound or vibration**. Background push/SMS is not implemented. Do not add notification promises to screenshots or copy.
+
+## Kitchen
+
+Phones have three stable bottom destinations: Orders, Menu and Settings. Reserve bottom/safe-area padding. Larger screens use ordinary navigation and compact queue columns.
+
+Orders show status, number, purchased items, permitted personal fields, ETA and total before actions. Queue counters filter status, and overdue/new-order notices remain visible.
+
+| Interaction | Behaviour |
+| --- | --- |
+| Order ETA presets | Save immediately and announce success/error |
+| Custom ETA | Explicit apply, 1–120 minutes |
+| Settings presets/schedule copy | Change draft only; explicit save |
+| Availability | Show changed stock only after API success |
+| Cancellation suggestion | Prefill reason only; explicit cancel confirmation |
+| Product deletion | Management permission, explicit destructive confirmation |
+| Pause/resume | Narrow operational update; cannot override owner stop |
+
+Kitchen sound defaults on per visit. Distinguish active, muted and browser-blocked/loading states. Retain pending alerts until activation/loading succeeds, while respecting deliberate mute. Audio is an enhancement to an open queue, not guaranteed background delivery.
 
 ## Owner workspace
 
-Keep the owner workspace distinct from the shift kitchen. Its four primary destinations are URL-backed **Обзор, Точки, Сотрудники, Аналитика**; privacy is a secondary business-wide destination. Use the 232px desktop sidebar from 1024px and four fixed bottom destinations below it. Reserve safe-area space. The header's store selector carries `store_id` through navigation; filters and report views live in URLs, not browser storage.
+Main destinations remain **Обзор, Точки, Сотрудники, Аналитика**. Privacy is secondary, business-wide administration.
 
-Lead the overview with actionable intake blockers and overdue queues, then current store rows, today's Moscow-date cohort and five recent cancellations/actions. Scheduled closure is informational. Show server-provided `intake_blockers`, including overlapping reasons; lifting an owner stop does not resolve other blockers. Never call completed-order value verified revenue or profit.
+Use the shared layout: 232px sidebar at 1024px and above; four fixed bottom destinations below. The mobile labelled account menu contains privacy, password change and logout.
 
-Use compact desktop rows, stacked phone cards, restrained type and neutral action menus. Store search/archive filters and staff search/access/role filters remain visible. Account editors always expose complete business-wide assignments, even when their list was filtered. Confirm destructive access changes, preserve drafts through errors/reauthentication, and warn before leaving unsaved edits. Privacy separates documents, verified requests and retention; publication and cleanup remain explicit protected actions.
+Routes and `store_id` selection must survive direct links, refresh and Back/Forward. Invalid selections return to all stores with an explanation. Store filtering never silently limits a business-wide account edit.
 
-Reports retain real timing sample counts, labelled axes/units, zero-order days and an accessible data table. Scope changes clear old data immediately and cancel requests; same-scope refresh errors may retain results only with a stale-data timestamp. Do not disguise failed requests as zero or rely on colour alone.
+Overview order:
 
-## Accessibility and verification
+1. Actionable intake/privacy/overdue issues.
+2. Live store queues and kitchen links.
+3. Today's Moscow-date figures.
+4. Five recent cancellations and five recent activity entries.
 
-Use native buttons, labels, checkboxes, forms, switches, and dialogs. Preserve visible focus, 44px primary touch targets, 16px text inputs, semantic grouping, reduced-motion support, safe-area padding, and labelled live messages. Icons supplement text rather than replacing ambiguous actions. Do not allow decorative status dots to carry the only meaning.
+Show all relevant blockers; an ordinary scheduled closure is informational. Lifting an owner stop must not imply that a pause or missing privacy publication disappeared.
 
-Validate storefront, product details, checkout, kitchen queue, settings, and option editor at **320, 390, 768, and 1440px**. Check actual screenshots as well as scroll-width assertions. Test the font loading with Cyrillic/ruble text, immediate ETA persistence, draft-only settings presets, quick availability changes, product quantities/options, and the existing lost-response retry flow. Use the isolated browser-test stack, never real shop orders.
+Store/staff screens use compact desktop rows and readable phone cards. Keep search/filter controls, explicit saves, confirmations and full assignments. New stores start unpublished; menu copying names source/destination and retains the same retry key.
 
-See `tests/e2e/design.spec.ts`, `tests/e2e/improvements.spec.ts`, `tests/e2e/order.spec.ts`, `tests/e2e/history.spec.ts`, and `docs/TEST_RESULTS.md`. History regressions use synthetic private links and mocked tracking receipts. Chromium checks do not replace a real-device iOS/Safari check or a full accessibility audit.
+Analytics separates metrics, order history and activity through URL-backed views. Label dates, units, axes, sample counts and missing timing data. Include zero-order days and an accessible table. Never label completed-order value as verified revenue.
+
+Privacy separates documents, requests and retention. Distinguish unsaved edits, saved draft and immutable published versions. Keep verification, reauthentication and cleanup activation explicit.
+
+## Accessibility and failure handling
+
+Use native labelled controls/dialogs, visible focus, at least 44px primary touch targets, readable text inputs and safe-area spacing. Icons supplement text.
+
+On a scope/account change, cancel obsolete requests and hide mismatched data immediately. A same-scope refresh failure may retain results only with an explicit stale state/timestamp; it must not appear as zero.
+
+Keep form drafts through errors and password confirmation. Warn before abandoning edits. Resume a sensitive action once with its original target/payload.
+
+Route/root error recovery must work without auth/menu providers and must never expose raw stack traces, clear browser storage or resubmit an order.
+
+## Review checklist
+
+Inspect at 320, 390, 768 and 1440px, including real screenshots:
+
+- No horizontal overflow or content hidden behind fixed navigation.
+- Cyrillic/ruble font loading and readable product names/prices.
+- Keyboard access, dialog focus restoration and labelled errors.
+- Checkout submission/retry state and independent store baskets.
+- Immediate order controls versus unsaved settings drafts.
+- Owner filters, account memberships, report labels and privacy safeguards.
+
+Chromium screenshots do not establish physical-phone Safari behaviour or a complete accessibility audit. See the [testing guide](TEST_RESULTS.md).

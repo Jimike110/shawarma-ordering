@@ -1,182 +1,205 @@
-# Deployment: GitHub + Netlify + Neon, separately for each business
+# Deployment and upgrades
 
-The user selected this setup on 2026-10-10:
+This guide explains what must happen before a release and how the existing demonstration deployment is configured. It does not deploy anything.
 
-| Part        | Setup for each business                                                 |
-| ----------- | ----------------------------------------------------------------------- |
-| Source code | Separate private GitHub repository, editable locally                    |
-| Frontend    | React production build on a separate Netlify site in the user's account |
-| Backend     | Go function adapter deployed with that Netlify site                     |
-| Database    | Separate Neon project with its own credentials                          |
+## Deployment boundaries
 
-Each business has its own repository, Netlify site, Neon project, domain/origin, staff credentials, and session secret. Deploying or editing one business must not change another business's data or configuration. Local development continues to use the existing Docker/Vite workflow.
+| Environment | Purpose | Current approach |
+| --- | --- | --- |
+| Local development | Code changes and manual development | Docker Compose + Vite |
+| Disposable review | Automated tests and synthetic demonstrations | Separate Compose project and tmpfs database |
+| Hosted demonstration | Demonstrate the application | Existing GitHub + Netlify frontend/Go function + Neon |
+| Real-data production | Serve the business and its customers | Infrastructure locations and operational arrangements must be separately approved |
 
-Local Git is initialized on `main`. The user supplied the deployed site `https://shawarma-ordering.netlify.app` on 2026-10-10. Its initial supplied logs showed PostgreSQL falling back to the Netlify sandbox user and a local `/tmp` socket instead of Neon. The user subsequently reports kitchen login followed by logout on refresh, suggesting the initial connectivity blocker has been addressed; the cross-instance session defect below was reproduced and fixed locally. Hosted configuration and menu transfer have not been independently verified. The agent has not provisioned these resources. Resources must belong to the user's accounts. Never put service tokens or database URLs into frontend code, Git, or chat messages.
+Use one repository, deployment and database per business. Multiple stores of that business share its deployment. Never share production credentials/data with another business or a public preview.
 
-**Go lifecycle constraint:** the current `backend/cmd/netlify` adapter uses Lambda compatibility mode. Netlify's current [official documentation](https://docs.netlify.com/build/functions/lambda-compatibility/?fn-language=go) says deployments containing that mode will stop being accepted on **July 1, 2027**. Treat the existing Go integration as a current deployment candidate requiring a live check and a migration decision before that date, not as a verified long-term solution. The modern TypeScript compatibility package is not a drop-in replacement for this Go binary. Do not silently replace the user's Go backend or hosting choice.
+The known demonstration URL is <https://shawarma-ordering.netlify.app>. This documentation is not a live availability report. A previously reported combination of healthy database ping and failing data endpoints, together with unapplied hosted migrations, points to checking the deployed schema first.
 
-## 1. Create a repository
+## Production launch gates
 
-Create an empty repository in your own GitHub account and connect the local repository. The commands below describe a fresh setup; local Git is already initialized on `main`, so skip initialization/remote steps already completed and inspect existing configuration before changing it:
+Before real customer/staff data is used:
 
-```powershell
-git init
-git add .
-git commit -m "Build shawarma ordering MVP"
-git branch -M main
-git remote add origin https://github.com/YOUR_ACCOUNT/shawarma-ordering.git
-git push -u origin main
-```
+- Confirm the operator's legal/payment details and approved privacy documents.
+- Verify Russian production processing/storage locations, including logs, backups, support access and contractors; see [privacy operations](../PRIVACY_OPERATIONS.md).
+- Approve hosting, ownership of accounts/domain, costs, access and support arrangements.
+- Back up and rehearse migrations on an isolated database.
+- Create the owner and real staff assignments; test permissions and session persistence.
+- Confirm the actual menu, address, hours, availability, ingredients/allergens and contact route.
+- Verify checkout, exact retries, private tracking and kitchen fulfilment together.
+- Configure restricted encrypted backups, independent journal storage, restoration, maintenance and external alerts.
+- Agree the launch date only after readiness checks pass.
 
-Check that `.env` is ignored before pushing. Source photos, lockfiles, tests, Compose, and build scripts should be committed. CI contains only disposable test credentials.
+The supplied Docker/server components can be used in a separately designed hosting arrangement, but the repository does not provision Russian production infrastructure, TLS ingress, a scheduler or alerting. Do not publish Vite as a production service.
 
-## 2. Create a separate Neon project for this business
+Netlify/Neon demonstration configuration does not resolve those requirements.
 
-Create a Neon project dedicated to this business and choose PostgreSQL 17 or newer. Select a region close to the Netlify function region where possible. Review the chosen plan's compute, connection, storage, and restore-history limits; this guide provisions nothing and assumes no particular paid/free entitlement.
+## Safe upgrade sequence
 
-Copy two TLS-enabled connection URLs from Neon into secure configuration:
+1. Identify the intended environment, database, current application version and migration ledger.
+2. Arrange a maintenance window where needed. Retain the previous application artifacts and a protected backup.
+3. Rehearse against isolated data, including privacy journal replay when applicable.
+4. Run migrations explicitly against the target before publishing code that needs them.
+5. Publish matching frontend/backend artifacts together.
+6. Verify data endpoints, authentication, authorization and an isolated/approved smoke order.
+7. Reopen traffic only when the checks pass.
 
-- **Pooled URL:** use as `DATABASE_URL` for Netlify's function runtime. Neon pooled endpoint hostnames include `-pooler`. The current Go `database/sql` pool is capped at four connections per warm function instance; serverless scaling still multiplies application connections.
-- **Direct URL:** use for explicit migrations, `pg_dump`/restore, and operator maintenance. Keep it outside the frontend and separate from runtime configuration. This project calls the direct URL `DATABASE_URL` only inside the operator's migration/backup process; it does not yet implement a separate automatic `DIRECT_DATABASE_URL` setting.
+`schema_migrations` records `schema.sql` and subsequent migrations. Add migrations; do not edit already-applied ones. Migration `003_access.sql` maps old data to original store 1 and revokes legacy shared sessions. Migration `004_privacy.sql` adds privacy structures and blocks new intake until document publication. It does not activate cleanup.
 
-For example, a placeholder direct URL is `postgres://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require`. Use the actual URL supplied by Neon without discarding its TLS options. See Neon's [pooling guidance](https://neon.com/blog/inside-lubots-database-per-tenant-architecture) for the pooled/direct distinction.
+Do not treat rolling back frontend files as a database rollback. Restoring an old snapshot also needs the [privacy restore gate](../PRIVACY_OPERATIONS.md#restore-without-resurrecting-erased-data).
 
-Choose the initial data before running migrations: either start clean and apply the approved menu/settings, or restore the existing shop backup into an empty target database first. Do not run a full restore into a database already populated by fresh migrations. Restored databases carry their migration ledger; the migration command below then applies only missing versions.
+## Existing Netlify and Neon demonstration
 
-Apply the schema from a machine that can reach the chosen database:
+### Repository and build
 
-Go does not automatically load the project's `.env`. Set `DATABASE_URL` in the shell that runs the migration; configuring it in Netlify does not set it on your computer. The database opener rejects empty/whitespace URLs instead of letting the PostgreSQL driver fall back to localhost and your OS username. If you see `user=Jimike database=` or a localhost TLS/authentication error, check that this variable was exported in the same terminal. Do not disable Neon TLS to fix a missing URL.
+The root [netlify.toml](../netlify.toml) defines:
 
-**Git Bash / MINGW64**, starting in `backend/`: copy only Neon's direct connection URL (not the surrounding `psql` command). The hidden prompt avoids putting the credential in shell history or terminal output.
+| Setting | Value |
+| --- | --- |
+| Base | Repository root |
+| Build command | `npm run build:netlify` |
+| Publish directory | `dist` |
+| Functions directory | `netlify/functions` |
+| Node toolchain | 22 |
+| Go toolchain | 1.25.5 |
 
-```bash
-read -r -s -p "Paste Neon direct connection URL: " DATABASE_URL
-printf '\n'
-export DATABASE_URL
-go run ./cmd/migrate
-unset DATABASE_URL
-```
+[scripts/build-netlify.mjs](../scripts/build-netlify.mjs) checks TypeScript, builds React assets and compiles a Linux amd64 Go function named `api`. The `/api/*` redirect preserves the route suffix; other paths return the React entry point for direct navigation.
 
-Keep the URL's TLS options such as `sslmode=require`. The final `unset` only clears the variable from this shell after the command.
+A local build does not publish:
 
-**PowerShell**, starting in the project root:
-
-```powershell
-$env:DATABASE_URL = "YOUR_NEON_DIRECT_CONNECTION_URL"
-cd backend
-go run ./cmd/migrate
-cd ..
-```
-
-PowerShell's `$env:DATABASE_URL = ...` syntax does not work in Git Bash; Bash uses `export`. Prefer a secure local prompt when setting real credentials, and never paste database URLs into chat.
-
-The migration includes demo products and uses `ON CONFLICT DO NOTHING`; rerunning it does not replace staff product edits. The function does not run migrations on every request.
-
-The running local shop already has the real 19-item menu and staff-edited settings. Before launch, explicitly choose between restoring that database into the new Neon project or initializing a clean database and applying the approved menu/settings. Do not assume source photos/config files populate Neon automatically, and do not reapply the original shop-name file over current staff edits. Preserve purchased receipt snapshots if transferring existing orders. Keep a pre-transfer backup and verify restored data before enabling customer traffic; see `OPERATIONS.md` and `MENU_SOURCE.md`.
-
-### Transfer the current menu and shop settings into a fresh hosted database
-
-Use this for an already-migrated Neon database with the initial demo catalogue. It transfers public shop data only, leaving hosted orders, sessions, credentials, and rate limits alone. It does not bring local test orders into production.
-
-The latest local public API snapshot on 2026-10-10 has **19 products**, shop name **Я@Ша**, address **Белорусская ул., 4**, daily **11:00–22:00** shifts, **10-minute** preparation time, and a staff-filled phone number. **Рыба-Фиш** is unavailable. These current staff values supersede the original setup file's name and 09:00 opening time; do not reapply that older file blindly. The phone is copied as staff entered it, not independently verified.
-
-1. Keep the local app running. From the repository root in Git Bash or PowerShell, generate a snapshot:
-
-   ```bash
-   docker compose -f compose.yaml -f compose.tools.yaml run --rm --no-deps -e STORE_ID=1 frontend-tools node scripts/prepare-shop-transfer.mjs
-   ```
-
-   If Node 22 is installed locally, set `STORE_ID=1` explicitly before running `node scripts/prepare-shop-transfer.mjs`. The script makes only one unauthenticated local menu request, checks all menu photo checksums, and writes `artifacts/shop-transfer.json` plus `artifacts/import-shop.sql`. It never connects to Neon or changes a database. The files are ignored by Git.
-
-2. Review the JSON snapshot for current shop values and availability. The generator copies current product names/prices/descriptions/options rather than restoring older manifest values.
-3. In the Neon project used by this Netlify site's `DATABASE_URL`, open **SQL Editor** and choose that same branch and database. Run migrations first if the application tables are missing. Review/back up any existing hosted data before applying the transfer.
-4. Open `artifacts/import-shop.sql`, copy the complete file into the editor, and run it. The data-changing `DO` statement is atomic and contains no `psql` metacommands. The final verification queries should show 19 products on a fresh target and the reviewed shop settings.
-5. Refresh the Netlify storefront. Database changes need no redeploy. If photos are missing, ensure `public/images/menu/` is committed and included in the deployed frontend build.
-
-The import matches products by image path, adds missing products with new IDs, and removes only the three completely untouched demo fixtures. It preserves unrelated target products and all historic order receipts. An identical snapshot can be reapplied without changing product IDs. Target shop settings must still be bootstrap defaults (allowing the older catalogue import's demo/map changes), or already identical to the snapshot. Differing matching products or edited target settings cause an error before applying the import; review those differences instead of bypassing the checks. Once staff are using the hosted shop, make future edits in its kitchen panel rather than repeatedly importing local snapshots.
-
-The artifact prepared in this workspace was verified against a disposable PostgreSQL 17 database, including forced rollback, repeated import, unchanged order snapshots, and conflicting target settings/product edits. It has **not** been applied to Neon.
-
-## 3. Import the repository into Netlify
-
-When you choose to deploy, connect that GitHub repository through Netlify's UI. The root `netlify.toml` already defines:
-
-| Setting             | Value                   |
-| ------------------- | ----------------------- |
-| Base directory      | Repository root         |
-| Build command       | `npm run build:netlify` |
-| Publish directory   | `dist`                  |
-| Functions directory | `netlify/functions`     |
-| Node                | 22                      |
-| Go build toolchain  | 1.25.5                  |
-
-The build script produces a Linux amd64 Go binary called `api` and the React assets. A redirect sends `/api/*` to that function with the original path suffix. The function converts the event to a normal Go HTTP request and preserves session cookies.
-
-Set these environment variables with the **Functions** runtime scope before using the app:
-
-| Variable               | Value                                                                               |
-| ---------------------- | ----------------------------------------------------------------------------------- |
-| `DATABASE_URL`         | TLS-enabled Neon pooled connection URL                                              |
-| `SESSION_SECRET`       | At least 32 random characters; keep it stable                                       |
-| `PUBLIC_ORIGIN`        | Exact origin, e.g. `https://YOUR_SITE.netlify.app`, with no trailing slash          |
-| `COOKIE_SECURE`        | `true`                                                                              |
-| `TRUST_PROXY`          | `false`; the adapter uses the provider's client identity, not arbitrary `X-Real-IP` |
-| `ORDER_RETENTION_DAYS` | `0` until the user chooses a retention policy                                       |
-
-Staff accounts are stored in this business database; runtime `KITCHEN_PASSWORD`, `KITCHEN_PASSWORD_HASH` and `STAFF_USERS` do not grant access. Keep `AUTO_MIGRATE` disabled/unset for functions; back up and run migrations explicitly using the direct connection. Before publishing the new frontend/backend, bootstrap the first owner with `./scripts/staff-admin.ps1 -Hosted` and an explicitly exported target direct `DATABASE_URL`. The password prompt is hidden. See the [upgrade instructions](../README.md#staff-accounts-and-upgrades).
-
-Database/session secrets belong in Netlify environment settings, not in `netlify.toml`, the frontend, or GitHub source.
-
-`PUBLIC_ORIGIN` intentionally permits exactly one origin for staff mutations. Store production database/staff secrets in the Production deploy context with Functions scope. Disable previews initially, or give them separately scoped credentials and an isolated empty/sanitized Neon preview branch/test database plus a matching origin. Never let preview deployments write to production data or expose a production-data clone. A separate Neon project per business is still required; preview branches are for environments within that one business.
-
-You can verify the artifacts locally first:
-
-```powershell
+```text
 npm ci
-npm test
+npm run check
 npm run build:netlify
 ```
 
-This builds only. It does not deploy. The Linux function binary is not executable directly on Windows.
+The Linux function binary cannot be run directly on Windows.
 
-### Troubleshooting: menu unavailable and a `/tmp/.s.PGSQL.5432` error
+GitHub checks and Netlify automatic publishing are separate. The build script does not run the whole test suite or apply migrations. Configure provider/branch release gates explicitly; a push can publish code even if another CI job later fails.
 
-The deployed site reported `Сервис временно недоступен.` on 2026-10-10. Its `Function init:` logs included `user=sbx_user1051 database=` and a missing `/tmp/.s.PGSQL.5432` socket. These are PostgreSQL driver defaults, indicating that the function is not receiving the intended Neon connection configuration. Netlify does not host the local Compose PostgreSQL service.
+### Database connection URLs
 
-1. Open the Netlify project's **Environment variables** settings and add or correct the exact key `DATABASE_URL`.
-2. Paste only Neon's pooled connection URL, preserving its TLS options. Do not include a `psql` command, shell quotes, or a `DATABASE_URL=` prefix. Do not use the local Docker/localhost URL.
-3. Apply the value to the **Production** deploy context. If scope controls are offered, include **Functions**; otherwise use the default all scopes. Build-only scope does not make the value available at runtime. Do not copy production database credentials to previews.
-4. Save and trigger a new production deploy. Merely editing the variable does not change the function in an existing deployment.
-5. Recheck `/api/health` and `/api/menu`, and review fresh function logs. If migrations have not been applied, run the explicit migration command above with Neon's direct URL. A migrated fresh database still needs the approved real menu/settings.
+Use the Neon **pooled TLS URL** for the function runtime. Use its **direct TLS URL** for migrations, backups and administrative maintenance.
 
-For this site, `PUBLIC_ORIGIN` must be `https://shawarma-ordering.netlify.app` with no trailing slash, and `COOKIE_SECURE` must be `true`. The local database opener now rejects blank `DATABASE_URL` values with an explicit diagnostic; deploy the updated source to get that diagnostic. This guard does not configure Netlify or populate Neon.
+Both are supplied to their respective process as `DATABASE_URL`. There is no automatic `DIRECT_DATABASE_URL` setting. Preserve provider TLS options; do not disable TLS to fix an unset environment variable.
 
-Netlify's [function environment documentation](https://docs.netlify.com/build/functions/environment-variables/) confirms that runtime scope must include Functions, variables in `netlify.toml` are unavailable to functions, and updated values require a new deploy. The local `.env` is not automatically loaded by this Go adapter.
+The API pool is capped at four open connections per warm instance; serverless scaling can multiply that number.
 
-## 4. Verify after your chosen deployment
+A fresh schema seeds demo content. Deployed images/JSON do not automatically populate a hosted catalogue. Choose either a reviewed restore into an empty target or fresh migrations followed by [public menu/settings transfer](MENU_SOURCE.md#transfer-current-public-settings-and-menu). Do not restore a full dump over an already initialized target as a routine import.
 
-### Troubleshooting: kitchen login disappears on reload
+### Run explicit migrations
 
-The staff API now uses database-backed sessions and `staff_session` scoped to `/api`. Migration `003_access.sql` invalidates old kitchen sessions; bootstrap an owner explicitly before publishing the upgrade. Shared environment passwords no longer work.
+Direct Go does not load the root `.env`. Netlify's runtime environment is also separate from your terminal.
 
-If refresh shows login, inspect `GET /api/auth/me` and whether `staff_session` is sent, without sharing its value. HTTP 401 can mean expiry or account/password/assignment revocation; network/5xx failures are service errors. HTTPS requires `COOKIE_SECURE=true`, an exact `PUBLIC_ORIGIN` and the same deployed hostname. Verify session persistence across function cold starts after deployment.
+**Git Bash/MINGW64**, starting at the root:
 
-Open the menu, submit a test order, save its tracking link, sign in to the kitchen, and advance the order. Confirm that the open tracking page updates without a manual refresh. Test a paused shop and an unavailable product.
+```bash
+read -r -s -p "Target direct database URL: " DATABASE_URL
+printf '\n'
+export DATABASE_URL
+cd backend
+go run ./cmd/migrate
+cd ..
+# Keep DATABASE_URL only if performing the reviewed owner step next.
+unset DATABASE_URL
+```
 
-Also verify `/api/health`, direct/reloaded `/orders` and `/kitchen` routes, session cookies on HTTPS, logout, retry idempotency, exact menu prices/photos, and database reconnection after Neon idles. Run public checks only against the intended launch/test database. Browser history is origin-local: localhost's saved order links/cart do not automatically appear on the new domain.
+Enter the URL only, not a `psql` command or `DATABASE_URL=` prefix.
 
-The standalone API's daily maintenance loop and Compose backup container do not run inside Netlify functions. Arrange session/rate-counter maintenance, an explicit backup/restore policy, and external health monitoring before accepting live orders. Check the actual Neon plan's restore history and test restoration; local Docker backups alone do not protect the hosted database. Monitor Netlify function usage and Neon compute usage, since menu/order polling creates recurring requests.
+**PowerShell**, starting at the root:
 
-## Netlify support limitation
+```powershell
+$targetDatabase = Read-Host "Target direct database URL" -AsSecureString
+$env:DATABASE_URL = [System.Net.NetworkCredential]::new('', $targetDatabase).Password
+Push-Location backend
+go run ./cmd/migrate
+Pop-Location
+Remove-Item Env:DATABASE_URL
+$targetDatabase.Dispose()
+```
 
-As checked for this delivery on October 10, 2026, Netlify's documentation sends Go authors to the Lambda-compatible API. That page says Lambda compatibility deployments will no longer be accepted from July 1, 2027. This package therefore contains the current Go path, with that lifecycle limitation made explicit.
+Stop if migration fails. Do not paste connection URLs into chat or retain them in command history. Migration success proves the schema command completed, not the entire hosted release.
 
-Recheck the official documentation before publishing and schedule a migration decision before that deadline. The selected public architecture remains Netlify + Go + Neon; any runtime/hosting change requires an explicit decision. The standalone Docker server remains the local development/test fallback.
+### Owner administration
 
-Official references:
+The owner is stored in the target PostgreSQL database. There is no password in frontend configuration.
 
-- https://docs.netlify.com/build/functions/get-started/
-- https://docs.netlify.com/build/functions/lambda-compatibility/?fn-language=go
-- https://docs.netlify.com/build/functions/configuration/
+Export the target direct `DATABASE_URL` securely as above, then run from the root:
 
-Local compilation and adapter tests cover the supplied build and routing code. The user's deployed function logs confirm execution but show a database initialization failure; successful live platform/database operation has not yet been verified.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\staff-admin.ps1 -Hosted
+```
+
+This prompts for a hidden personal owner password and creates `owner / Владелец`. If the owner already exists and recovery is intended:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\staff-admin.ps1 -Hosted -Mode recovery -Username owner
+```
+
+Remove the exported URL when finished. The hosted switch runs the Go CLI on your computer; it does not call a public registration/recovery endpoint.
+
+For Bash, with the target URL exported, from `backend/`:
+
+```bash
+read -r -s -p "New owner password: " owner_password
+printf '\n'
+printf '%s\n' "$owner_password" | go run ./cmd/staff-admin -mode bootstrap -username owner -name 'Владелец'
+unset owner_password
+```
+
+Use `-mode recovery` only for a reviewed recovery. The command receives the password on stdin; do not put it in arguments.
+
+Legacy named bcrypt accounts can be imported with `staff-admin -mode import` and deliberately supplied `STAFF_USERS`. They become workers at original store 1 and require a password change. Shared environment kitchen passwords do not authenticate runtime users.
+
+### Runtime settings
+
+Configure these in Netlify's **Production environment**, with **Functions runtime scope**:
+
+| Variable | Value |
+| --- | --- |
+| `DATABASE_URL` | Target pooled TLS URL |
+| `SESSION_SECRET` | Business's stable random key, at least 32 characters |
+| `PUBLIC_ORIGIN` | Exact HTTPS origin, no path/trailing slash |
+| `COOKIE_SECURE` | `true` |
+| `TRUST_PROXY` | `false`; the adapter uses provider client identity |
+| `ORDER_RETENTION_DAYS` | `0` or unset; legacy deletion is retired |
+
+Keep `AUTO_MIGRATE` unset/disabled for functions; the adapter does not migrate. Do not add a temporary `/tmp` deletion journal and call it durable independent storage. Privacy administration requiring that journal needs an appropriate persistence design.
+
+The local `.env` and build-only variables do not provide runtime secrets. Netlify documents that function environment changes require a new deployment and that `netlify.toml` variables do not supply function runtime values. [Function environment documentation](https://docs.netlify.com/build/functions/environment-variables/)
+
+Disable previews or give them a separate empty/sanitized database and matching origin. Do not expose production data through a preview branch or reuse production function secrets there.
+
+### Platform lifecycle
+
+The current adapter uses Lambda compatibility mode. Netlify states that deployments using that mode will no longer be accepted from **1 July 2027**. Rechecked on 16 October 2026. A runtime migration decision is required; the modern JavaScript compatibility wrapper is not established here as a drop-in replacement for the Go binary. [Official lifecycle notice](https://docs.netlify.com/build/functions/lambda-compatibility/)
+
+## Verify a deployed release
+
+Check the intended environment, not localhost:
+
+1. `/api/health`, `/api/stores`, `/api/privacy` and a published store's menu.
+2. Direct navigation/reload for `/orders`, `/kitchen` and owner routes.
+3. HTTPS cookies, refresh/cold-start persistence, logout and role/store isolation.
+4. Exact approved menu/photos/prices and number-only/consented checkout.
+5. Lost-response retry without duplicates and tracking that reveals no optional personal fields.
+6. Kitchen status/ETA/availability/pause, owner stops and existing-order fulfilment.
+7. Backup restoration, independent deletion journal, maintenance schedule and alert destinations.
+
+Use synthetic or explicitly approved smoke data. Browser storage belongs to an origin: localhost baskets/history do not automatically move to a new domain.
+
+Functions do not run the standalone server's hourly maintenance loop or Compose backup service. Arrange those jobs externally. Polling creates repeated requests; measure actual provider usage instead of assuming a free plan will always suffice.
+
+## Troubleshooting
+
+| Symptom | Likely check |
+| --- | --- |
+| Missing database URL / local socket / OS-user fallback | Correct runtime environment or export the intended CLI URL; do not use localhost URLs for hosted PostgreSQL |
+| Health 200, data endpoints 500 | Pending migrations, wrong database/branch or code/schema mismatch |
+| New API route 404 | Old deployed Go artifact or incorrect function routing |
+| Empty/demo menu | Schema initialization is not the real-menu import |
+| Login fails after legacy upgrade | Create/recover a database owner; environment shared passwords no longer work |
+| Login lost on refresh | Cookie sent to correct HTTPS hostname/path, secure flag, session expiry or account revocation |
+| Staff writes 403 | Exact Origin, role/store assignment or recent-password requirement |
+| Privacy mutation fails | Independent writable journal and original stable key, not an ephemeral function directory |
+
+Do not rotate `SESSION_SECRET` or reset a database merely to troubleshoot login. Keep private credentials/tokens out of logs and support messages.

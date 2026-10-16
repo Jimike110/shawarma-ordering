@@ -1,74 +1,185 @@
-# Running the shop
+# Operating the application
 
-The app supports multiple pickup stores within one business and payment at collection. Current local kitchen settings, checked on 2026-10-10, use **Я@Ша**, **Белорусская ул., 4, Санкт-Петербург**, and daily **11:00–22:00 Moscow time**, with 10-minute preparation and a staff-filled phone number. Рыба-Фиш is unavailable. `config/shop.json` retains the original Я люблю шаверму name and 09:00 opening; review current staff edits before applying it. The running shop uses the 19-item catalogue, prices, portion sizes, and local photos from the user-selected Yandex Maps listing; demo mode is disabled. See [menu source/import](MENU_SOURCE.md) before applying the catalogue to a fresh database and the [hosted shop transfer](DEPLOYMENT.md#transfer-the-current-menu-and-shop-settings-into-a-fresh-hosted-database) to copy current public data to Neon. Full ingredient/allergen information is still unset; staff must confirm contact accuracy, current stock, and schedule exceptions.
+This guide is for the business owner, shift staff and the person maintaining the service. For first installation, use the [README](../README.md). For release procedures, use [deployment](DEPLOYMENT.md).
 
-## Daily operation
+The business's saved database settings are authoritative. Bundled JSON files and old screenshots are not a current statement of opening hours, prices, phone numbers or stock.
 
-The current local frontend is in Vite hot-reload mode at the usual `localhost:5173`. Start it with both `compose.yaml` and `compose.vite.yaml`; the same database and daily backup service remain in use. See [development mode](DEVELOPMENT.md) for commands and intentionally switching back to nginx. The default nginx build remains the production serving path.
+## Who can do what?
 
-- Keep the kitchen page open on a powered device. Turn on sound after signing in; new orders also show a visible notice. Sound needs the browser to remain awake and does not deliver background push notifications.
-- The queue retains every active order; it includes up to 300 orders closed in the last 24 hours. Oldest active orders appear first. Search uses the order number or guest name.
-- Update preparation time when the kitchen is delayed. Overdue orders are highlighted. Cancel with a customer-facing reason when necessary; customers see that reason on their private status page.
-- On an order, tapping **5 / 10 / 15 / 20 / 30 мин** immediately updates its ready time from now and shows confirmation. For a custom value, enter 1–120 minutes and tap **Применить**. Settings time buttons update the draft only; use **Сохранить настройки** to persist it.
-- Tap new/preparing/ready counters to filter the queue. On phones, switch between orders/menu/settings through the bottom navigation. Availability switches in Menu change stock without opening the product editor. Cancellation suggestions only fill the reason; confirm cancellation explicitly.
-- To repeat Monday's hours throughout the week, use **Как в понедельник — на всю неделю**, review the days, then save settings. This includes weekends and replaces their draft shifts.
-- Set opening hours in Moscow time. Overnight shifts close on the following day. A checked schedule with no working days closes ordering. Manual pause overrides opening hours. Without a schedule, staff control intake using pause.
-- Product options have stable IDs, labels, and an extra price in whole rubles; a zero price represents a free change. Historic receipts keep the selected labels and paid prices. Removing an option prevents new orders with it but does not change existing receipts.
+| Action | Owner | Manager | Worker |
+| --- | --- | --- | --- |
+| Fulfil/cancel orders and change an order's ETA | Every store | Assigned stores | Assigned stores |
+| Change availability, base preparation time and operational pause | Every store | Assigned stores | Assigned stores |
+| Edit/delete products, prices, shop details and opening hours | Every store | Assigned stores | No |
+| View full order history, activity and analytics | Every store | Assigned stores | No |
+| Manage accounts, passwords and store assignments | Yes | No | No |
+| Create/publish/archive stores and impose owner stops | Yes | No | No |
+| Privacy documents, rights requests and retention administration | Yes | No | No |
 
-## Staff access
+An account may be a manager at one store and a worker at another. Owners do not need individual store assignments.
 
-Staff accounts live in PostgreSQL. Back up before migration `003_access.sql`; it removes legacy shared sessions while preserving original store data. After migration, run `./scripts/staff-admin.ps1` to create the first owner (hidden password prompt). See [upgrade instructions](../README.md#staff-accounts-and-upgrades), including explicit owner recovery and legacy bcrypt-account import.
+## Begin a shift
 
-Owners create accounts and assign manager/worker access per store through the dashboard. Temporary passwords expire after 24 hours and require a personal password at first login. Passwords are never displayed after issuance. Password resets, disabling accounts and assignment changes revoke existing sessions. Staff sessions last 12 hours and persist across refreshes and function restarts; sensitive owner changes require password confirmation within five minutes.
+1. Open `/kitchen` and sign in with your personal account.
+2. Replace a temporary password if requested. If several stores are assigned, choose the correct store.
+3. Check the pickup address, intake state, preparation estimate and active queue.
+4. Keep the kitchen page open on a powered, connected device.
+5. Kitchen sound starts enabled. If the browser displays an activation control, tap it or interact with the page. Verify device volume and use visual queue notices too.
 
-Workers handle orders, stock, preparation time and operational pauses. Managers also edit their store's products/settings and see reports. Only owners control accounts, publication/archival and owner stops. Operational pauses cannot override an owner stop. Existing orders remain available for fulfilment while intake is stopped.
+Sound is a page feature, not a push notification. A suspended tab or locked device may miss or delay it. Customer tracking currently has no sound or vibration.
+
+## Handle orders
+
+The normal sequence is:
+
+`new → preparing → ready → completed`
+
+The Russian controls guide staff through starting preparation, marking ready and confirming collection. Any active order may be cancelled with a nonempty, customer-visible reason. Completed/cancelled orders cannot be reopened through the API.
+
+- The queue includes all active orders, even old ones, plus up to 300 recently closed orders from the last 24 hours.
+- Queue counters filter new, preparing and ready orders. Search helps find an order number or guest name.
+- An order's **5 / 10 / 15 / 20 / 30 мин** shortcuts update its ETA immediately, measured from now. A custom ETA accepts 1–120 minutes.
+- Settings preparation presets are different: they edit a draft and require **Сохранить настройки** (Save settings).
+- Cancellation suggestions only fill the reason. Review and confirm; never put private customer details into a public cancellation message.
+- Collect payment at pickup. Marking an order completed records fulfilment, not a verified cash-register transaction.
+
+An overdue marker compares the current state/time with the estimate. Updating an ETA does not rewrite the original promised ETA used for reporting.
+
+## Availability and intake
+
+There are several independent reasons a store may reject new orders:
+
+| State | Meaning | Who resolves it |
+| --- | --- | --- |
+| Archived | Store is retained for history but not trading | Owner |
+| Unpublished | Store is a draft or hidden | Owner |
+| Privacy unpublished | Business documents are not published | Owner |
+| Owner stop | Business-level stop on that store | Owner |
+| Operational pause | Shift temporarily stopped intake | Assigned staff or owner |
+| Outside hours | Current Moscow time is outside its schedule | Wait for opening or have a manager/owner correct the schedule |
+
+Removing one blocker does not remove the others. Workers can lift an operational pause but cannot override an owner stop. Accepted orders remain available for fulfilment while intake is stopped.
+
+## Products and store settings
+
+Managers/owners edit the store's menu and settings. Workers use the narrower stock and operations controls.
+
+- Availability switches change whether a product can be ordered. Wait for success before assuming stock changed.
+- Product options have stable IDs, labels and integer-ruble prices; zero can represent a free change.
+- Existing receipts preserve purchased names, prices and options after edits.
+- Permanent product deletion requires confirmation. Prefer availability-off for a temporary stock shortage. Deletion does not rewrite old orders or accepted retries.
+- Enter confirmed ingredients/allergens only; blank is preferable to invented food-safety information.
+- Opening hours are Moscow time. A closing time before opening means an overnight shift.
+- Enabled scheduling with no days closes intake. Disabled scheduling leaves intake under manual pause controls.
+- **Как в понедельник — на всю неделю** copies Monday into the draft, including weekends; review before saving.
+
+## Owner workspace
+
+Owners have four main destinations:
+
+- **Обзор** (Overview): problems needing attention, current store queues, today's figures and recent activity.
+- **Точки** (Stores): search/filter stores, open their kitchens and manage lifecycle actions.
+- **Сотрудники** (Staff): accounts and complete store assignments.
+- **Аналитика** (Analytics): metrics, order history and activity.
+
+The shared **Точка** (Store) selector defaults to all stores and is preserved in navigation URLs. An account edit remains business-wide even when the list is filtered to one store.
+
+**Персональные данные** is a secondary destination in the sidebar or mobile account menu. It applies to the entire business.
+
+### New stores
+
+Create a store as an unpublished draft. Configure its address, settings, products and staff before publication.
+
+Menu copying adds new products to the destination, initially unavailable. It does not replace the destination menu or keep the two menus synchronized. Retain the same copy request key if retrying.
+
+Archival preserves history/analytics and prevents new ordering. The server refuses archival while active orders remain.
+
+### Reporting definitions
+
+Reports use orders' creation dates in Moscow time. Available ranges are Today, 7 days, 30 days and custom dates bounded by the API.
+
+Completed-order value is the sum of completed order totals; it is **not verified revenue, profit or financial reconciliation**. Timing reports use recorded events and the initial promised ETA, include sample counts and omit unavailable historical measurements. Archived aggregates are combined with retained orders without double counting.
+
+## Accounts and password recovery
+
+Owners create staff accounts and issue random temporary passwords shown once. They expire after 24 hours; the recipient must choose a personal password before accessing business data.
+
+Account disabling, password resets and role/assignment changes revoke existing sessions. Personal passwords cannot be viewed. Normal sessions last up to 12 hours; temporary-password sessions are shorter and restricted. A personal password change replaces the current session and revokes the others.
+
+For a locked-out owner on the local Compose installation:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\staff-admin.ps1 -Mode recovery -Username owner
+```
+
+For a hosted database, follow [direct owner administration](DEPLOYMENT.md#owner-administration). Do not point a recovery command at a database merely because its credentials happen to be in your shell.
+
+The app protects the last active owner. Sensitive owner actions may ask for password confirmation again after five minutes.
 
 ## Backups
 
-Start daily local backups alongside the app:
+Start the local daily backup service without changing frontend mode:
 
 ```powershell
-docker compose --profile operations up -d --build
-docker compose --profile operations ps
+docker compose -f compose.yaml -f compose.vite.yaml --profile operations up -d backups
 ```
 
-The backup service writes PostgreSQL custom-format archives to `backups/` immediately, then daily. It retains archives for 14 days, retries failures every minute, and verifies archive readability before marking success. Its health check reports unhealthy if no successful backup has completed within 25 hours. Backups contain customer data and session hashes; the directory is excluded from Git and Docker build contexts.
+It writes restricted PostgreSQL custom-format archives into ignored `backups/`, verifies their archive listing, and updates `backups/last-success`. It runs immediately and then daily, retries failures after a minute, and prunes this service's complete/incomplete dumps older than approximately 14 days before each attempt.
 
-An on-demand backup:
+Take an extra backup before a migration, import or risky configuration change:
 
 ```powershell
-docker compose --profile operations run --rm backups --once
+docker compose -f compose.yaml --profile operations run --rm backups --once
 ```
 
-Local archives protect against an application mistake, but do not survive losing this computer or disk. Copy completed archives to an encrypted off-machine destination under your control. No external backup account has been connected by this change.
+Success means “a readable dump was made”, not “restoration was proven”. The health check becomes unhealthy when the last successful marker is older than about 25 hours.
 
-Test restoration into a separate database before relying on backups. Never restore over the shop database during routine verification:
+Keep encrypted off-machine copies with a defined expiry and restricted access. A local folder does not protect against losing the computer. Provider snapshots/replicas need their own retention configuration. Protect the stable signing key and independent deletion journal separately.
+
+### Rehearse a restore
+
+Use a separate disposable database, not a new schema inside the live shop. These commands create no frontend/API service:
 
 ```powershell
-docker compose exec db createdb -U shawarma shawarma_restore_test
-# Replace the filename with one from backups/. This copies into the database container.
-docker compose cp ./backups/CHOSEN_ARCHIVE.dump db:/tmp/restore-check.dump
-docker compose exec db pg_restore --exit-on-error --no-owner -U shawarma -d shawarma_restore_test /tmp/restore-check.dump
-docker compose exec db psql -U shawarma -d shawarma_restore_test -c 'SELECT count(*) FROM orders;'
+docker compose -p shawarma-restore-check -f compose.e2e.yaml up -d db
+docker compose -p shawarma-restore-check -f compose.e2e.yaml cp ./backups/CHOSEN_ARCHIVE.dump db:/tmp/check.dump
+docker compose -p shawarma-restore-check -f compose.e2e.yaml exec -T db pg_restore --exit-on-error --no-owner -U shawarma -d shawarma_test /tmp/check.dump
+docker compose -p shawarma-restore-check -f compose.e2e.yaml exec -T db psql -U shawarma -d shawarma_test -c "SELECT count(*) FROM orders;"
 ```
 
-The restore check database is intentionally separate and can be removed by its operator afterward. Backups include the schema migration ledger. Application migrations run transactionally under a database lock, once per recorded version; they preserve staff edits and existing orders. Add a new migration file for future schema changes rather than editing an applied migration.
+Replace `CHOSEN_ARCHIVE.dump` with the reviewed file. Inspect settings, receipts and migration history too. A successful count is only a basic restoration check.
 
-## Health, logs, and retention
+A database restored from personal-data backups must remain inaccessible until the [privacy restore gate](../PRIVACY_OPERATIONS.md#restore-without-resurrecting-erased-data) has replayed the independent journal and drained overdue cleanup. This rehearsal does not authorize serving restored customer data.
 
-`http://localhost:5173/api/health` checks database connectivity through the public web proxy. Compose health checks cover the database, API, web proxy, and optional backups. API failures and slow requests are logged without tracking URLs. The nginx API location suppresses access/error URL logs so bearer tracking tokens do not enter them; Go logs and health checks provide diagnostics.
+After the isolated check:
 
 ```powershell
-docker compose --profile operations ps
-docker compose logs --tail 100 api backups
+docker compose -p shawarma-restore-check -f compose.e2e.yaml down
 ```
 
-Expired sessions and rate-limit counters are cleaned at startup and every 24 hours by the standalone API. Closed-order deletion is disabled by default. Set `ORDER_RETENTION_DAYS` to 30–3650 to explicitly enable it; only orders already completed/cancelled and older than that many days since their last update are deleted. Active orders are never removed by this task. After deletion, old private links no longer resolve. Keep retention disabled if you still need those records. Audit events are retained until an operator sets a separate archival policy.
+Its tmpfs database is discarded. Do not change the project name to the real shop.
 
-The Netlify function does not have a background maintenance loop; schedule database housekeeping externally for that deployment model. No external uptime alert service is configured. Before a public launch, choose an alert destination and monitor the deployed `/api/health` endpoint and backup health.
+## Monitoring and maintenance
 
-## Public deployment
+```powershell
+docker compose -f compose.yaml -f compose.vite.yaml --profile operations ps
+docker compose -f compose.yaml logs --tail 100 api backups
+```
 
-Serve the site through HTTPS; set the exact `PUBLIC_ORIGIN`, `COOKIE_SECURE=true`, strong credentials, and a stable random session secret. Only nginx publishes a local port in the default Compose file. The Go service trusts the nginx client-IP header and remains private to the container network. Do not expose that API port directly while `TRUST_PROXY=true`.
+Check both `/api/health` and a real data endpoint such as `/api/stores`. Health checks PostgreSQL connectivity; it does not validate every migrated table.
 
-The default port binds to `127.0.0.1` for local use. The selected hosted setup is a separate GitHub repository, Netlify site with Go functions, and Neon project per business. The user deployed `https://shawarma-ordering.netlify.app`; hosted database configuration and initial shop-data transfer still need verification. See [deployment instructions](DEPLOYMENT.md) for runtime secrets, current-data transfer, maintenance, launch checks, and the Go adapter's platform lifecycle constraint. The agent has not provisioned the cloud resources or applied the shop transfer to Neon.
+The standalone server cleans expired sessions/security counters at startup and hourly. Privacy erasure and receipt archival use the separate CLI and must be explicitly activated. **Do not enable `ORDER_RETENTION_DAYS`: that old deletion path is retired.**
+
+Arrange external uptime/backup alerts and an incident contact before launch. No external monitoring destination is configured by the source code. Serverless functions do not inherit the standalone maintenance loop or the local backup container.
+
+Go avoids logging bearer URLs and database-error contents; nginx suppresses API URL logs. Review hosting/proxy logs separately. Never share logs containing cookies, connection URLs or private tracking tokens.
+
+## When something fails
+
+- **API 404 on a newly added feature:** check that the Go binary was rebuilt.
+- **Health is 200 but menus/privacy return 500:** check the intended database's migration ledger and application release.
+- **Login disappears on refresh:** check `/api/auth/me`, cookie delivery, HTTPS flags, origin and account revocation. A network failure is not proof that the password changed.
+- **Cannot accept new orders:** inspect all intake blockers, including privacy publication.
+- **Unknown/expired guest link:** customers need their original private link; numeric lookup is deliberately unavailable.
+
+Use the [development troubleshooting table](DEVELOPMENT.md#common-development-problems) or [deployment guide](DEPLOYMENT.md#troubleshooting) for the relevant environment.

@@ -1,31 +1,47 @@
-# Local Vite development
+# Development and configuration
 
-The current local frontend runs **Vite with React Fast Refresh** at **http://localhost:5173**. Docker provides Node 22; no host Node installation is required. It uses the existing Go API, PostgreSQL volume, kitchen settings, menu, orders, and daily backup service.
+Use this guide after the [README quick start](../README.md#quick-start). Commands run from the repository root unless a different directory is named. PowerShell is used for the main examples; Linux/macOS shells can use the same Docker commands.
 
-## Start or resume
+## Choose one development mode
 
-From the project directory:
+| Mode | Frontend | API | Database |
+| --- | --- | --- | --- |
+| Recommended: Docker + Vite | Vite container, updates on save | Go container, rebuild after edits | Persistent private PostgreSQL container |
+| Built local preview | nginx serves compiled React files | Go container | Same normal database |
+| Host development | Host Vite | Host Go process | PostgreSQL with localhost-only port |
+
+Do not run both host Vite and the container frontend on port 5173. Changing modes does not require deleting the database.
+
+## Docker + Vite
 
 ```powershell
 docker compose -f compose.yaml -f compose.vite.yaml --profile operations up -d --build
 docker compose -f compose.yaml -f compose.vite.yaml --profile operations ps
 ```
 
-The override replaces only the `web` frontend with `Dockerfile.dev`; it does not create a different database/project. Keep the same project name and the existing `.env`. Vite listens on container port 80 to reuse the base file's localhost-only `127.0.0.1:5173:80` mapping. Its WebSocket client uses port 5173. The API and PostgreSQL have no published port in this setup.
+Open <http://localhost:5173>. The database/API have no host port in this mode. Vite proxies `/api` internally and preserves the browser Origin. Its proxy overwrites the trusted client-IP header.
 
-Edit `src/` and save: styles update immediately and React usually preserves local component state through Fast Refresh. Some module/export changes trigger a full page reload. Changes to `public/` or the HTML also reload the page. The server uses 300ms file polling for Docker Desktop/Windows bind mounts, and dependencies live in the separate `frontend_dev_node_modules` Linux volume. Generated artifacts/backups/backend files are excluded from the development watcher.
+### Change the application
 
-The API is compiled Go and does **not** hot reload. After changing backend source, rebuild/restart that service:
+| Changed files | Action |
+| --- | --- |
+| `src/` components or CSS | Save; Vite updates the browser |
+| `public/` assets or `index.html` | Vite may reload the page |
+| Go source or embedded migrations | Rebuild/restart `api` |
+| `package.json` / lockfile | Rebuild frontend image and synchronize its dependency volume |
+| Compose environment or `.env` | Recreate the affected service; a restart alone does not re-read container environment |
+
+Rebuild the API:
 
 ```powershell
-docker compose -f compose.yaml -f compose.vite.yaml --profile operations up -d --build api
+docker compose -f compose.yaml -f compose.vite.yaml up -d --build api
 ```
 
-Staff-saved menu/settings changes still persist in PostgreSQL and appear through the existing menu polling. Vite changes the frontend serving method, not the shop data.
+Normal Compose sets `AUTO_MIGRATE=true`, so rebuilding the API may apply migrations at startup. Back up before an upgrade. This is different from the function adapter, which does not apply migrations.
 
-## Dependency changes
+Refresh an old nginx-served browser tab once after switching to Vite. Subsequent frontend saves normally update automatically. React Fast Refresh may preserve state; some module changes require a full reload.
 
-After editing dependencies and updating the lockfile, rebuild the development image and synchronize the Linux dependency volume:
+### Dependency changes
 
 ```powershell
 docker compose -f compose.yaml -f compose.vite.yaml build web
@@ -33,34 +49,108 @@ docker compose -f compose.yaml -f compose.vite.yaml run --rm --no-deps web npm c
 docker compose -f compose.yaml -f compose.vite.yaml up -d --force-recreate --no-deps web
 ```
 
-Do not delete PostgreSQL volumes to fix frontend dependencies.
+The `frontend_dev_node_modules` volume contains Linux dependencies. Host Windows `node_modules` is not a substitute. Rebuild after updating the lockfile; do not delete PostgreSQL volumes to repair dependencies.
 
-## Return to the built frontend
-
-```powershell
-docker compose --profile operations up -d --build --no-deps web
-```
-
-This restores nginx and the production frontend at the same URL; refresh the browser once. Running the base Compose command without `compose.vite.yaml` switches to that built mode. Keep using both files while developing. Vite is for local development; the default nginx build remains the production path.
-
-## Verify hot reload
+### Built frontend preview
 
 ```powershell
-docker compose -p shawarma-review -f compose.e2e.yaml run --rm --no-deps -v './scripts:/app/scripts:ro' -v './src:/app/src' browser node scripts/verify-dev.mjs
-docker compose -p shawarma-review -f compose.e2e.yaml down
+docker compose -f compose.yaml --profile operations up -d --build --no-deps web
 ```
 
-The script checks the running local Vite client/WebSocket and API/menu, briefly appends a unique CSS custom property, checks that it appears without browser navigation, removes only that probe block, and verifies its removal. It never signs staff in or submits an order. It also checks that `.env` and backup files cannot be fetched through Vite. API proxy requests retain the browser Origin; Vite overwrites the client-IP header trusted by the private Go API.
+This replaces Vite with nginx at the same address. Source edits now need another build. Return to Vite with the first command in this guide. Always include `compose.vite.yaml` when you intend development mode.
 
-For browser order/staff tests, use the disposable database with a Vite override:
+## Host Node/Go development
 
-```powershell
-docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml up -d db api web
-'e2e-only-kitchen-password' | docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml exec -T api staff-admin -mode bootstrap -username owner -name TestOwner
-docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml run --build --rm --no-deps browser
-docker compose -p shawarma-review -f compose.e2e.yaml -f compose.e2e.vite.yaml down
-```
+Install Node.js 22.12+, Go 1.25.5 (the CI/container toolchain), and Docker Desktop. PostgreSQL 17 is the supplied database version.
 
-Start these browser tests with a fresh disposable stack, as documented in `docs/TEST_RESULTS.md`. They use the bootstrap demo fixtures, not the real imported menu. No test order should be placed against the shop database.
+1. Generate `.env` if needed with `node scripts/setup-env.mjs`.
+2. Stop the container frontend and API so you do not accidentally use stale Go code:
+   ```powershell
+   docker compose -f compose.yaml -f compose.vite.yaml stop web api
+   docker compose -f compose.yaml -f compose.dev.yaml up -d db
+   npm ci
+   node scripts/run-backend.mjs
+   ```
+3. In another terminal at the root:
+   ```powershell
+   npm run dev
+   ```
 
-Configuration references: [Vite server options](https://vite.dev/config/server-options), [Compose file merging](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/). Configuration uses the HMR options supported by the installed Vite 7 dependency.
+The helper loads the root `.env`, then starts Go from `backend/`. Direct `go run` commands do **not** load `.env`. The host database URL generated by setup uses `127.0.0.1:5432`; the database container must be published using `compose.dev.yaml`.
+
+Create/recover owners using the administrative CLI against this local database. The default PowerShell staff helper expects a running API container; its `-Hosted` switch instead runs the host Go CLI against an explicitly exported `DATABASE_URL`. Despite its name, that switch simply selects direct CLI execution.
+
+The host Vite proxy defaults to `http://127.0.0.1:8080`. The normal Docker API remains unexposed.
+
+## Environment reference
+
+Never put backend secrets in React source, `VITE_*` variables or committed files.
+
+| Variable | Used by | Meaning |
+| --- | --- | --- |
+| `POSTGRES_PASSWORD` | Normal Compose | Password for its persistent local PostgreSQL service |
+| `DATABASE_URL` | Go server/CLIs/function | Explicit PostgreSQL connection URL; required |
+| `SESSION_SECRET` | API and privacy maintenance | At least 32 characters; stable signing/digest key |
+| `PUBLIC_ORIGIN` | API | Exact browser origin, without path or trailing slash |
+| `COOKIE_SECURE` | API | `true` for HTTPS; `false` only for local HTTP |
+| `AUTO_MIGRATE` | Standalone server | Apply pending migrations at startup only when exactly `true` |
+| `TRUST_PROXY` | API | Trust overwritten `X-Real-IP` only behind the private controlled proxy |
+| `LISTEN_ADDR` | Standalone server | Defaults to `:8080` |
+| `ORDER_RETENTION_DAYS` | Standalone server | Retired setting; keep `0` or unset |
+| `PRIVACY_JOURNAL_PATH` | Go API/maintenance | Protected absolute path to the independent deletion journal |
+| `PRIVACY_JOURNAL_DIR` | Optional Compose override | Host directory mounted as that journal directory |
+| `API_PROXY_TARGET` | Vite | Internal API destination; not a public deployment setting |
+| `VITE_USE_POLLING` | Vite configuration | Use file polling for Windows Docker mounts |
+| `VITE_HMR_CLIENT_PORT` | Vite configuration | Browser-side hot-reload WebSocket port |
+
+Normal Compose builds the API's `DATABASE_URL` from `POSTGRES_PASSWORD` and `db`. It does not forward the root `.env` value of `DATABASE_URL` into that container. Host CLIs and hosted functions do use their explicitly supplied `DATABASE_URL`. This distinction matters when troubleshooting accidental Neon/local mixing.
+
+Compose also explicitly enables local migrations and proxy trust. Setting a different value in `.env` does not override a literal value in the Compose file.
+
+Legacy `KITCHEN_PASSWORD`, `KITCHEN_PASSWORD_HASH` and `STAFF_USERS` do not authenticate runtime logins. `STAFF_USERS` is accepted only by explicit legacy-account import.
+
+## Repository map
+
+| Path | What belongs here |
+| --- | --- |
+| `src/pages/` | Customer, kitchen, owner and privacy screens |
+| `src/staff.tsx`, `src/ownerWorkspace.tsx` | Staff auth/workspace composition and owner navigation |
+| `src/auth.ts`, `src/staffStore.ts`, `src/ownerContext.ts` | Shared context identities/hooks; keep imports acyclic |
+| `src/cart.tsx`, `src/checkoutAttempt.ts` | Store-specific baskets and immutable pending submissions |
+| `src/orderHistory.ts`, `src/useSavedOrders.ts` | Browser private-link history |
+| `src/usePolling.ts` | Request serialization, cancellation and refresh |
+| `src/ErrorBoundary.tsx` | Independent route/root recovery screens |
+| `backend/internal/app/` | API, validation, transactional storage, auth, reports and privacy |
+| `backend/cmd/` | Executable entry points |
+| `config/` | Reviewed initial shop/menu snapshots, not live database configuration |
+| `public/` | Locally served images, font and kitchen audio |
+| `scripts/` | Setup, import, build, backup and verification helpers |
+| `tests/e2e/` | Playwright workflows on disposable data |
+| `artifacts/` | Ignored screenshots, reports and local working outputs |
+| `backups/` | Ignored restricted database dumps |
+
+### Request and data flow
+
+The browser requests `/api` on the same origin. Vite/nginx proxies those requests to Go; Go validates requests, checks the current account/store and executes PostgreSQL transactions. The Netlify adapter wraps the same API handler.
+
+Core tables represent stores, store settings, products, orders, staff accounts/memberships, sessions and activity. Orders retain purchased item and pickup-location snapshots. Privacy tables hold immutable documents, consent evidence, requests, expiry markers, destruction evidence and archived aggregate statistics.
+
+Checkout locks the relevant store before validating intake/products. Retry keys distinguish an accepted attempt from a new order. Current prices, menu edits or privacy publication must not turn an accepted retry into a second order.
+
+Migrations are embedded in Go. `schema.sql` and `002_shop.sql`, `003_access.sql`, `004_privacy.sql` are applied transactionally under a lock and recorded in `schema_migrations`. Add a new migration for later changes.
+
+## Common development problems
+
+| Symptom | Check/action |
+| --- | --- |
+| Changes do not appear | Confirm Vite mode; nginx needs a rebuild. Confirm the correct browser origin. |
+| New page says “Маршрут не найден.” for an API call | Rebuild the Go API; frontend hot reload does not update backend routes. Distinguish API JSON 404 from the frontend recovery page. |
+| “Меню пока недоступно” | Inspect failed API requests, service health and migrations; a database ping alone does not prove tables are current. |
+| localhost database TLS/auth error with an OS username | Export the intended `DATABASE_URL` in the same terminal; direct Go does not load `.env`. |
+| PowerShell refuses `staff-admin.ps1` | Use the process-scoped invocation in the README, not a permanent machine-policy change. |
+| Staff write returns 403 | Check exact `PUBLIC_ORIGIN`, cookie, role/store and any reauthentication code. |
+| Login returns 429 during tests | Recreate only the disposable test stack; do not weaken production limits. |
+| Port 5173 is occupied | Stop the other frontend mode before starting this one. |
+| Sound does not start in the kitchen | Tap the page or activate sound; browser/device restrictions still apply. No customer sound/vibration exists. |
+
+Run [isolated tests](TEST_RESULTS.md) after code changes. Keep Vite localhost-only; do not bypass its file restrictions or use it as a public production server.
