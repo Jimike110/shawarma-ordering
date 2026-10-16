@@ -21,6 +21,9 @@ import {
   Volume2,
   VolumeX,
   Trash2,
+  HomeIcon,
+  Home,
+  Flame,
 } from 'lucide-react';
 import { ApiError, errorMessage, json } from '../api';
 import { usePolling } from '../usePolling';
@@ -36,6 +39,7 @@ import {
   type Settings,
   type Status,
 } from '../types';
+import { Link } from 'react-router-dom';
 const nextStatus: Partial<Record<Status, Status>> = {
   new: 'preparing',
   preparing: 'ready',
@@ -1056,6 +1060,13 @@ export function Kitchen({ accountMenu }: { accountMenu?: ReactNode }) {
       <div className="kitchen-operations-header">
         <div className="kitchen-topbar">
           <div className="kitchen-location">
+            <div>
+              <Link to={'/kitchen'} className="brand">
+                <span className="brand-mark">
+                  <Flame size={25} />
+                </span>
+              </Link>
+            </div>
             <h1>Кухня</h1>
             <span title={menu.data?.settings.address}>
               {menu.data?.settings.address || 'Подключаемся…'}
