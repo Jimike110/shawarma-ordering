@@ -210,7 +210,11 @@ func TestMigrationsPreserveEditsAndAreVersioned(t *testing.T) {
 	}
 	var count int
 	store.DB.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&count)
-	if count != 4 {
+	files, err := migrations.ReadDir("migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1+len(files) {
 		t.Fatalf("wrong migration count %d", count)
 	}
 }

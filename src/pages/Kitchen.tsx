@@ -1,9 +1,15 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { nativeKitchenAction, useNativeKitchen } from '../nativeKitchen';
+import { useKitchenHealth } from '../useKitchenHealth';
+import { KitchenBoard } from './KitchenBoard';
+import { KitchenDialog } from './KitchenDialog';
+import { ToppingsPanel } from './ToppingsPanel';
+import '../kitchen.css';
 import { useStaffStore } from '../staffStore';
 import { WorkerSettings } from './WorkerSettings';
 import { useKitchenSound } from '../useKitchenSound';
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Clock3,
   LogOut,
@@ -112,15 +118,19 @@ function TimePresets({
   onChange,
   disabled = false,
   label,
+  values = preparationTimes,
+  extra,
 }: {
   value: number;
   onChange: (minutes: number) => void;
   disabled?: boolean;
   label: string;
+  values?: readonly number[];
+  extra?: ReactNode;
 }) {
   return (
     <div className="time-presets" role="group" aria-label={label}>
-      {preparationTimes.map((minutes) => (
+      {values.map((minutes) => (
         <button
           type="button"
           key={minutes}
@@ -131,6 +141,7 @@ function TimePresets({
           {minutes} мин
         </button>
       ))}
+      {extra}
     </div>
   );
 }
@@ -155,6 +166,7 @@ function OrderCard({
   const [cancelling, setCancelling] = useState(false),
     [reason, setReason] = useState('');
   const [confirmation, setConfirmation] = useState('');
+  const [customTime, setCustomTime] = useState(false);
   const closed = order.status === 'completed' || order.status === 'cancelled';
   const overdue =
     !closed && order.status !== 'ready' && Date.now() > Date.parse(order.estimated_ready_at);
@@ -165,12 +177,18 @@ function OrderCard({
     setConfirmation('');
     try {
       await api('/kitchen/orders/' + order.id, { method: 'PATCH', body: json(value) });
-      if ('eta_minutes' in value) setConfirmation('Время готовности обновлено');
+      if ('eta_minutes' in value) {
+        setConfirmation('Время готовности обновлено');
+        setCustomTime(false);
+      }
       reload();
     } catch (e) {
       setError(errorMessage(e));
       if (e instanceof ApiError && e.status === 401) expired();
-      if (e instanceof ApiError && e.status === 409) reload();
+      if (e instanceof ApiError && e.status === 409) {
+        setError('Заказ уже изменён на другом устройстве. Обновляем очередь.');
+        reload();
+      }
     } finally {
       setBusy(false);
     }
@@ -188,9 +206,10 @@ function OrderCard({
         <div key={i} className="kitchen-item">
           <span>
             {item.quantity} × {item.name}
+            {item.portion && <span className="receipt-options">{item.portion}</span>}
             {!!item.options?.length && (
               <small className="receipt-options">
-                {item.options.map((o) => o.label).join(', ')}
+                {item.options.map((o) => o.label + (o.portion ? ' · ' + o.portion : '')).join(', ')}
               </small>
             )}
           </span>
@@ -209,6 +228,13 @@ function OrderCard({
       </div>
       {!closed && (
         <>
+          <button
+            className="button full"
+            disabled={busy}
+            onClick={() => void update({ status: nextStatus[order.status] })}
+          >
+            {busy ? 'Сохраняем…' : actionLabels[order.status]}
+          </button>
           {order.status !== 'ready' && (
             <form
               className="eta-form"
@@ -223,88 +249,111 @@ function OrderCard({
                   value={minutes}
                   label={'Время готовности заказа ' + order.number}
                   disabled={busy}
+                  values={[5, 10, 15, 20]}
+                  extra={
+                    <button
+                      type="button"
+                      aria-label="Своё время"
+                      title="Своё время"
+                      disabled={busy}
+                      onClick={() => setCustomTime(true)}
+                    >
+                      Своё
+                    </button>
+                  }
                   onChange={(value) => {
                     setMinutes(value);
                     void update({ eta_minutes: value });
                   }}
                 />
               </div>
-              <label>
-                Своё время{' '}
-                <input
-                  aria-label={'Минут для заказа ' + order.number}
-                  type="number"
-                  value={minutes}
-                  min={1}
-                  max={120}
-                  required
-                  disabled={busy}
-                  onChange={(e) => setMinutes(Number(e.target.value))}
-                />{' '}
-                мин
-              </label>
-              <button
-                className="button secondary small"
-                aria-label={'Сохранить время заказа ' + order.number}
-                disabled={busy}
-              >
-                <Check size={16} /> Применить
-              </button>
+              {customTime && (
+                <KitchenDialog
+                  title={'Время заказа №' + order.number}
+                  busy={busy}
+                  close={() => setCustomTime(false)}
+                >
+                  <label>
+                    Своё время{' '}
+                    <input
+                      aria-label={'Минут для заказа ' + order.number}
+                      type="number"
+                      value={minutes}
+                      min={1}
+                      max={120}
+                      required
+                      disabled={busy}
+                      onChange={(e) => setMinutes(Number(e.target.value))}
+                    />{' '}
+                    мин
+                  </label>
+                  <button
+                    className="button secondary small"
+                    aria-label={'Сохранить время заказа ' + order.number}
+                    disabled={busy}
+                  >
+                    <Check size={16} /> Применить
+                  </button>
+                </KitchenDialog>
+              )}
             </form>
           )}
-          <button
-            className="button full"
-            disabled={busy}
-            onClick={() => void update({ status: nextStatus[order.status] })}
-          >
-            {busy ? 'Сохраняем…' : actionLabels[order.status]}
-          </button>
           {cancelling ? (
-            <form
-              className="cancel-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (reason.trim())
-                  void update({ status: 'cancelled', cancellation_reason: reason.trim() });
-              }}
+            <KitchenDialog
+              title={'Отменить заказ №' + order.number + '?'}
+              busy={busy}
+              close={() => setCancelling(false)}
             >
-              <label>
-                Причина отмены
-                <input
-                  value={reason}
-                  maxLength={300}
-                  required
-                  disabled={busy}
-                  placeholder="Сообщим клиенту"
-                  onChange={(e) => setReason(e.target.value)}
-                />
-              </label>
-              <div className="reason-presets" role="group" aria-label="Варианты сообщения клиенту">
-                {['Товар закончился', 'Кухня перегружена', 'По просьбе гостя'].map((value) => (
+              <form
+                className="cancel-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (reason.trim())
+                    void update({ status: 'cancelled', cancellation_reason: reason.trim() });
+                }}
+              >
+                <label>
+                  Причина отмены
+                  <input
+                    value={reason}
+                    maxLength={300}
+                    required
+                    disabled={busy}
+                    placeholder="Сообщим клиенту"
+                    onChange={(e) => setReason(e.target.value)}
+                  />
+                </label>
+                <div
+                  className="reason-presets"
+                  role="group"
+                  aria-label="Варианты сообщения клиенту"
+                >
+                  {['Товар закончился', 'Кухня перегружена', 'По просьбе гостя'].map((value) => (
+                    <button
+                      type="button"
+                      key={value}
+                      disabled={busy}
+                      onClick={() => setReason(value)}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+                <div className="form-row">
                   <button
                     type="button"
-                    key={value}
+                    className="button secondary small"
                     disabled={busy}
-                    onClick={() => setReason(value)}
+                    onClick={() => setCancelling(false)}
                   >
-                    {value}
+                    Оставить заказ
                   </button>
-                ))}
-              </div>
-              <div className="form-row">
-                <button
-                  type="button"
-                  className="button secondary small"
-                  disabled={busy}
-                  onClick={() => setCancelling(false)}
-                >
-                  Оставить заказ
-                </button>
-                <button className="button danger small" disabled={busy || !reason.trim()}>
-                  Подтвердить отмену
-                </button>
-              </div>
-            </form>
+                  <button className="button danger small" disabled={busy || !reason.trim()}>
+                    Подтвердить отмену
+                  </button>
+                </div>
+              </form>
+            </KitchenDialog>
           ) : (
             <button className="cancel-order" disabled={busy} onClick={() => setCancelling(true)}>
               Отменить заказ
@@ -535,54 +584,58 @@ function ProductEditor({
         <fieldset className="option-editor">
           <legend>Опции товара</legend>
           <p className="muted">Дополнения с ценой или бесплатные изменения. До 12 опций.</p>
-          {value.options.map((option, index) => (
-            <div className="option-editor-row" key={option.id}>
-              <label>
-                Название опции
-                <input
-                  required
-                  maxLength={80}
-                  value={option.label}
-                  onChange={(e) =>
-                    setValue({
-                      ...value,
-                      options: value.options.map((o, i) =>
-                        i === index ? { ...o, label: e.target.value } : o,
-                      ),
-                    })
+          {value.options.map((option, index) =>
+            option.topping_id ? (
+              <p key={option.id}>{option.label} · Управление в разделе «Добавки и соусы»</p>
+            ) : (
+              <div className="option-editor-row" key={option.id}>
+                <label>
+                  Название опции
+                  <input
+                    required
+                    maxLength={80}
+                    value={option.label}
+                    onChange={(e) =>
+                      setValue({
+                        ...value,
+                        options: value.options.map((o, i) =>
+                          i === index ? { ...o, label: e.target.value } : o,
+                        ),
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Доплата, ₽
+                  <input
+                    type="number"
+                    min={0}
+                    max={10000}
+                    required
+                    value={option.price}
+                    onChange={(e) =>
+                      setValue({
+                        ...value,
+                        options: value.options.map((o, i) =>
+                          i === index ? { ...o, price: Number(e.target.value) } : o,
+                        ),
+                      })
+                    }
+                  />
+                </label>
+                <button
+                  className="remove-line"
+                  type="button"
+                  aria-label={'Удалить опцию ' + (option.label || index + 1)}
+                  onClick={() =>
+                    setValue({ ...value, options: value.options.filter((_, i) => i !== index) })
                   }
-                />
-              </label>
-              <label>
-                Доплата, ₽
-                <input
-                  type="number"
-                  min={0}
-                  max={10000}
-                  required
-                  value={option.price}
-                  onChange={(e) =>
-                    setValue({
-                      ...value,
-                      options: value.options.map((o, i) =>
-                        i === index ? { ...o, price: Number(e.target.value) } : o,
-                      ),
-                    })
-                  }
-                />
-              </label>
-              <button
-                className="remove-line"
-                type="button"
-                aria-label={'Удалить опцию ' + (option.label || index + 1)}
-                onClick={() =>
-                  setValue({ ...value, options: value.options.filter((_, i) => i !== index) })
-                }
-              >
-                Удалить
-              </button>
-            </div>
-          ))}
+                >
+                  Удалить
+                </button>
+              </div>
+            ),
+          )}
           <button
             type="button"
             className="button secondary small"
@@ -853,7 +906,7 @@ function SettingsForm({
   );
 }
 export function Kitchen() {
-  const { invalidate } = useAuth();
+  const { invalidate, user } = useAuth();
   const { request: api, role, id: storeId } = useStaffStore();
   const auth = true;
   const setAuth = (_: boolean) => invalidate();
@@ -867,7 +920,8 @@ export function Kitchen() {
     [search, setSearch] = useState('');
   const [deleting, setDeleting] = useState<Product | null>(null),
     [menuNotice, setMenuNotice] = useState('');
-  const sound = useKitchenSound();
+  const native = useNativeKitchen();
+  const sound = useKitchenSound(native.native);
   const [newCount, setNewCount] = useState(0);
   const seen = useRef<Set<number> | null>(null);
   const loadOrders = useCallback(
@@ -883,6 +937,13 @@ export function Kitchen() {
   );
   const queue = usePolling(loadOrders, 5000, auth === true),
     menu = useMenu();
+  const health = useKitchenHealth(
+    user,
+    queue.lastUpdated,
+    sound.ready,
+    sound.enabled,
+    native.native,
+  );
   useEffect(() => {
     if (!auth || !queue.data) return;
     const ids = new Set(queue.data.map((o) => o.id!));
@@ -892,9 +953,9 @@ export function Kitchen() {
     seen.current = ids;
     if (fresh) {
       setNewCount((count) => count + fresh);
-      sound.alert();
     }
-  }, [queue.data, auth, sound.alert]);
+    sound.setPending(queue.data.some((o) => o.status === 'new'));
+  }, [queue.data, auth, sound.setPending]);
   useEffect(() => {
     if (!auth) {
       seen.current = null;
@@ -957,80 +1018,167 @@ export function Kitchen() {
       (o.number + ' ' + o.name).toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru')),
     )
     .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  const navigation = (
+    <nav className="kitchen-tabs" aria-label="Разделы кухни">
+      <button
+        aria-pressed={tab === 'orders'}
+        className={tab === 'orders' ? 'selected' : ''}
+        onClick={() => setTab('orders')}
+      >
+        <ClipboardList size={19} /> Заказы <span>{active.length}</span>
+      </button>
+      <button
+        aria-pressed={tab === 'menu'}
+        className={tab === 'menu' ? 'selected' : ''}
+        onClick={() => setTab('menu')}
+      >
+        <UtensilsCrossed size={19} /> Меню
+      </button>
+      <button
+        aria-pressed={tab === 'settings'}
+        className={tab === 'settings' ? 'selected' : ''}
+        onClick={() => setTab('settings')}
+      >
+        <SlidersHorizontal size={17} /> Настройки
+      </button>
+    </nav>
+  );
   return (
-    <main className="container kitchen">
-      <div className="kitchen-heading">
-        <div>
-          <div className="eyebrow">{menu.data?.settings.address || 'ПАНЕЛЬ СОТРУДНИКОВ'}</div>
-          <h1>Кухня</h1>
+    <main
+      className={
+        'container kitchen kitchen-tablet' +
+        (tab === 'orders' && filter === 'active' ? ' kitchen-board-active' : '')
+      }
+    >
+      <div className="kitchen-operations-header">
+        <div className="kitchen-title-row">
+          <div className="kitchen-heading">
+            <div>
+              <div className="eyebrow">{menu.data?.settings.address || 'ПАНЕЛЬ СОТРУДНИКОВ'}</div>
+              <h1>Кухня</h1>
+              <span className="kitchen-live-summary">
+                Новых: {orders.filter((o) => o.status === 'new').length}
+                {overdue > 0 ? ` · Опаздывают: ${overdue}` : ''}
+              </span>
+            </div>
+          </div>
+          {navigation}
+        </div>
+        {pauseDialog && (
+          <PauseDialog
+            reason={pauseReason}
+            setReason={setPauseReason}
+            busy={busy}
+            close={() => setPauseDialog(false)}
+            submit={() => void togglePause()}
+          />
+        )}
+        <div className="kitchen-toolbar">
+          <span className={'intake-status ' + (!menu.data?.accepting_orders ? 'paused' : '')}>
+            <span className="status-dot" />
+            {!menu.data
+              ? 'Загружаем статус…'
+              : menu.data.store?.owner_stopped
+                ? 'Стоп владельца'
+                : menu.data.settings.paused
+                  ? 'Приём на паузе'
+                  : menu.data.accepting_orders
+                    ? 'Принимаем заказы'
+                    : menu.data.intake_message || 'Не принимаем заказы'}
+          </span>
+          <button
+            className="button secondary small"
+            disabled={!menu.data || busy || menu.data.store?.owner_stopped}
+            onClick={() => void togglePause()}
+          >
+            {menu.data?.settings.paused ? <Play size={16} /> : <Pause size={16} />}{' '}
+            {menu.data?.settings.paused ? 'Возобновить' : 'Пауза'}
+          </button>
+          <button
+            className="button secondary small"
+            data-kitchen-sound
+            onClick={() =>
+              native.native
+                ? nativeKitchenAction(native.state.monitoring ? 'stop' : 'start')
+                : sound.toggle()
+            }
+            aria-pressed={native.native ? native.state.monitoring : sound.enabled}
+          >
+            {(native.native ? native.state.monitoring : sound.enabled) ? (
+              <Volume2 size={16} />
+            ) : (
+              <VolumeX size={16} />
+            )}{' '}
+            {native.native
+              ? native.state.monitoring
+                ? 'Остановить оповещения'
+                : 'Включить уведомления кухни'
+              : !sound.enabled
+                ? 'Включить оповещения'
+                : sound.ready
+                  ? 'Остановить оповещения'
+                  : 'Активировать звук'}
+          </button>
+          <button
+            className="button secondary small"
+            onClick={() => (native.native ? nativeKitchenAction('test') : sound.test())}
+          >
+            Проверить звук
+          </button>
+          {native.native && (
+            <button
+              className="button secondary small"
+              onClick={() => nativeKitchenAction('settings')}
+            >
+              Громкость и разрешения
+            </button>
+          )}
+          <span className="queue-refresh">
+            {queue.error
+              ? 'Связь прервалась'
+              : queue.lastUpdated
+                ? 'Обновлено ' + clock(queue.lastUpdated.toISOString())
+                : 'Подключаемся…'}
+          </span>
+          <button className="icon-button" aria-label="Обновить кухню" onClick={refresh}>
+            <RefreshCw size={18} />
+          </button>
         </div>
       </div>
-      {pauseDialog && (
-        <PauseDialog
-          reason={pauseReason}
-          setReason={setPauseReason}
-          busy={busy}
-          close={() => setPauseDialog(false)}
-          submit={() => void togglePause()}
-        />
+      {health.stale && (
+        <Notice kind="warning">
+          Нет свежей связи более 15 секунд. Показана последняя очередь; состояние заказов не
+          подтверждено. Приём новых заказов продолжается.
+        </Notice>
       )}
-      <div className="kitchen-toolbar">
-        <span className={'intake-status ' + (!menu.data?.accepting_orders ? 'paused' : '')}>
-          <span className="status-dot" />
-          {!menu.data
-            ? 'Загружаем статус…'
-            : menu.data.store?.owner_stopped
-              ? 'Стоп владельца'
-              : menu.data.settings.paused
-                ? 'Приём на паузе'
-                : menu.data.accepting_orders
-                  ? 'Принимаем заказы'
-                  : 'Закрыто по расписанию'}
-        </span>
-        <button
-          className="button secondary small"
-          disabled={!menu.data || busy || menu.data.store?.owner_stopped}
-          onClick={() => void togglePause()}
-        >
-          {menu.data?.settings.paused ? <Play size={16} /> : <Pause size={16} />}{' '}
-          {menu.data?.settings.paused ? 'Возобновить' : 'Пауза'}
-        </button>
-        <button
-          className="button secondary small"
-          data-kitchen-sound
-          onClick={sound.toggle}
-          aria-pressed={sound.enabled}
-        >
-          {sound.enabled ? <Volume2 size={16} /> : <VolumeX size={16} />}{' '}
-          {!sound.enabled ? 'Включить звук' : sound.ready ? 'Звук включён' : 'Активировать звук'}
-        </button>
-        <span className="queue-refresh">
-          {queue.error
-            ? 'Связь прервалась'
-            : queue.lastUpdated
-              ? 'Обновлено ' + clock(queue.lastUpdated.toISOString())
-              : 'Подключаемся…'}
-        </span>
-        <button className="icon-button" aria-label="Обновить кухню" onClick={refresh}>
-          <RefreshCw size={18} />
-        </button>
-      </div>
-      {sound.error ? (
-        <Notice>{sound.error}</Notice>
-      ) : (
-        sound.enabled &&
-        !sound.ready && (
-          <p className="fine-print" role="status">
-            Звук включён по умолчанию и ожидает первого нажатия на странице.
-          </p>
-        )
+      {(native.native ? !native.state.monitoring : !sound.enabled) && (
+        <Notice kind="warning">
+          Оповещения остановлены на этом устройстве. Новые заказы продолжают поступать.
+        </Notice>
       )}
+      {native.native && native.state.error && <Notice kind="warning">{native.state.error}</Notice>}
+      {health.heartbeatError && (
+        <Notice kind="warning">
+          Не удалось передать состояние устройства владельцу. Проверьте связь.
+        </Notice>
+      )}
+      {!native.native &&
+        (sound.error ? (
+          <Notice>{sound.error}</Notice>
+        ) : (
+          sound.enabled &&
+          !sound.ready && (
+            <p className="fine-print" role="status">
+              Звук включён по умолчанию и ожидает первого нажатия на странице.
+            </p>
+          )
+        ))}
       {error && <Notice>{error}</Notice>}
       {queue.error && <Notice>Очередь не обновилась. {queue.error}</Notice>}
       {menu.error && <Notice>Меню не обновилось. {menu.error}</Notice>}
-      {newCount > 0 && (
+      {(newCount > 0 || orders.some((o) => o.status === 'new')) && (
         <div className="new-orders-notice" role="status">
-          <span>Новых заказов: {newCount}</span>
+          <span>Новых заказов: {orders.filter((o) => o.status === 'new').length}</span>
           <button
             onClick={() => {
               setTab('orders');
@@ -1043,29 +1191,6 @@ export function Kitchen() {
           </button>
         </div>
       )}
-      <nav className="kitchen-tabs" aria-label="Разделы кухни">
-        <button
-          aria-pressed={tab === 'orders'}
-          className={tab === 'orders' ? 'selected' : ''}
-          onClick={() => setTab('orders')}
-        >
-          <ClipboardList size={19} /> Заказы <span>{active.length}</span>
-        </button>
-        <button
-          aria-pressed={tab === 'menu'}
-          className={tab === 'menu' ? 'selected' : ''}
-          onClick={() => setTab('menu')}
-        >
-          <UtensilsCrossed size={19} /> Меню
-        </button>
-        <button
-          aria-pressed={tab === 'settings'}
-          className={tab === 'settings' ? 'selected' : ''}
-          onClick={() => setTab('settings')}
-        >
-          <SlidersHorizontal size={17} /> Настройки
-        </button>
-      </nav>
       {tab === 'orders' && (
         <>
           <div className="queue-stats">
@@ -1120,7 +1245,7 @@ export function Kitchen() {
           </div>
           {queue.loading && !queue.data ? (
             <p role="status">Загружаем очередь…</p>
-          ) : visible.length === 0 ? (
+          ) : visible.length === 0 && (filter !== 'active' || !!search) ? (
             <div className="panel empty">
               <UtensilsCrossed size={30} />
               <h2>{search ? 'Заказ не найден' : 'Здесь пока тихо'}</h2>
@@ -1131,20 +1256,26 @@ export function Kitchen() {
               </p>
             </div>
           ) : (
-            <div className="kitchen-grid">
-              {visible.map((order) => (
+            <KitchenBoard
+              orders={visible}
+              board={filter === 'active'}
+              renderOrder={(order) => (
                 <OrderCard key={order.id} order={order} reload={queue.refresh} expired={expired} />
-              ))}
-            </div>
+              )}
+            />
           )}
           <p className="fine-print">
-            Все активные заказы. Закрытые: до 300 за последние 24 часа. Звук работает, пока эта
-            страница открыта.
+            Все активные заказы. Закрытые: до 300 за последние 24 часа. Оповещения повторяются, пока
+            есть новые заказы.{' '}
+            {native.native
+              ? 'Фоновую работу проверяйте в уведомлении Android.'
+              : 'Для фоновых оповещений используйте приложение кухни.'}
           </p>
         </>
       )}
       {tab === 'menu' && (
         <>
+          <ToppingsPanel products={menu.data?.products ?? []} saved={menu.refresh} />
           {deleting && (
             <DeleteProductDialog
               product={deleting}
@@ -1227,7 +1358,7 @@ export function Kitchen() {
                         {p.available ? 'В продаже' : 'Недоступен'}
                       </button>
                     </div>
-                    {role !== 'worker' && (
+                    {role !== 'worker' && !p.topping_id && (
                       <div className="staff-product-actions">
                         <button
                           className="button secondary small"

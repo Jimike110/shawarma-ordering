@@ -10,6 +10,7 @@ import { ActionMenu, IntakeState, OwnerLoading, RefreshStatus } from '../ownerWo
 import type { StaffAccount, Store } from '../types';
 import { AnalyticsPanel, ActivityPanel, HistoryPanel, TodaySummary } from './Reports';
 import { CopyMenu, Modal, NewStore, StoreLifecycle, UserForm, type Action } from './OwnerForms';
+import { KitchenAccessPanel } from './KitchenAccess';
 export { Modal } from './OwnerForms';
 const userInput = (u: StaffAccount) => ({
   username: u.username,
@@ -279,6 +280,7 @@ export function Owner({
       {section === 'overview' && (
         <>
           <Attention stores={active} />
+          <KitchenAccessPanel overview />
           <section className="owner-section">
             <div className="owner-section-heading">
               <h2>Точки сейчас</h2>
@@ -371,6 +373,7 @@ export function Owner({
       )}
       {section === 'staff' && (
         <>
+          <KitchenAccessPanel action={run} busy={busy} />
           <div className="owner-filters">
             <SearchField
               value={search}

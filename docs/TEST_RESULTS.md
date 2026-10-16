@@ -95,6 +95,8 @@ Rebuild the browser image first if source/tests changed. Repeated runs against t
 | Checkout | Server pricing/options, optional-data consent, unavailable items, pauses, store mismatch, ambiguous response retries |
 | Tracking/history | Automatic updates, no private fields, token-only lookup, expired receipts, route switching, saved links and legacy repair |
 | Staff | Owner/manager/worker boundaries, mixed store roles, temporary passwords, resets, revocation and last-owner protection |
+| Shared kitchens | Pending/approved/revoked devices, concurrent shared logins, fixed 30-day deadline, store switching, alert-only credentials and offline coverage without intake suspension |
+| Toppings | Dish/standalone price and portion snapshots, quantity multiplication, shared availability, full-product injection protection and independent retry-safe menu copies |
 | Owner | Navigation/refresh/Back, shared store filters, full membership edits, menu-copy retry and active-order archival rejection |
 | Privacy | Unconfigured intake, immutable versions, accepted retries after policy changes, requests/verification/export/erasure |
 | Retention | Seven-day/year boundaries, active exemptions, aggregates, repeated/concurrent jobs and restore-journal replay |
@@ -124,5 +126,7 @@ The Netlify build command compiles the frontend/function; it does not run the wh
 ## Limits of these checks
 
 Passing tests do not establish real-device Safari behaviour, phone background delivery, load capacity, uptime, legal compliance or production database configuration. Browser automation primarily uses Chromium.
+
+Android compilation, JVM alert-schedule tests and lint are separate from browser checks; run the [APK build helper](../android-kitchen/README.md#build-and-sign). Locked-screen delivery, Teclast power management/audio routing and an operating-day soak require the actual tablet. Desktop tests do not replace that acceptance.
 
 A documentation-only update should validate links, commands and references without presenting that as a new application regression run. Do not put private tokens, personal records or operator drafts into verification artifacts.

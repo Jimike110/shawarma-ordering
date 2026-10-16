@@ -20,13 +20,33 @@ An account may be a manager at one store and a worker at another. Owners do not 
 
 ## Begin a shift
 
-1. Open `/kitchen` and sign in with your personal account.
-2. Replace a temporary password if requested. If several stores are assigned, choose the correct store.
+1. Open `/kitchen` or the private Android app and sign in with the shared login for this store. Owners/managers retain personal accounts.
+2. On a new installation, ask the owner to approve the displayed device code. Approval is business-wide; the store's credentials determine its permitted queue. Personal accounts still replace temporary passwords when required.
 3. Check the pickup address, intake state, preparation estimate and active queue.
 4. Keep the kitchen page open on a powered, connected device.
 5. Kitchen sound starts enabled. If the browser displays an activation control, tap it or interact with the page. Verify device volume and use visual queue notices too.
 
-Sound is a page feature, not a push notification. A suspended tab or locked device may miss or delay it. Customer tracking currently has no sound or vibration.
+Browser audio repeats every 15 seconds while any order is **new**, including orders already present at login/reload. Viewing it or editing its ETA does not silence it; starting preparation/cancelling does. An outage preserves alerts for the last known unattended orders and labels that state unconfirmed. Stopping monitoring is explicit and leaves a warning; there is no saved permanent mute.
+
+For locked-screen operation use the [private Android app](../android-kitchen/README.md), enable monitoring and complete its permission/battery/speaker checks. Browser audio remains subject to tab suspension/autoplay restrictions. Customer tracking has no sound or vibration.
+
+### Shared kitchens and devices
+
+Owners manage **Сотрудники → Кухни и устройства**: create one shared login per store, approve pairing codes, rotate its password, end all store sessions or revoke one device. Passwords appear once. Shared kitchens can fulfil orders, set ETA/availability and operational pauses, but cannot manage content/prices, hours, people, reports, owner stops or their own credentials. Personal owner/manager permissions are unchanged.
+
+Remembered kitchen login has a **30-day absolute deadline**; renewable short sessions do not extend it. Rotation/disabling ends that store account's browser and native access. Revoking a lost device affects that device across this business. To move a tablet, log out/switch point and enter the destination credentials; other devices remain signed in. Audit entries identify the shared account and device, never an individual employee.
+
+Review and disable obsolete individual worker accounts before cutover; preserve their audit history. Rotate shared credentials when staff leave or a password may have escaped, and revoke missing devices. Re-enter the new password on retained approved tablets. Keep owner/manager credentials private.
+
+The owner overview shows coverage, including no connected devices. Heartbeats are every 15 seconds; devices become offline after 60 seconds. These are software checks, not proof of audible delivery. **Intake continues while kitchens are offline.** Check overdue queues and resolve warnings promptly.
+
+### Tablet queue
+
+At 1100+ CSS pixels the board has independently scrolling **Новые / Готовим / К выдаче** lanes; at 800–1099 it keeps new orders beside a switchable preparation/ready pane. Smaller screens use status filters and a persistent new-order notice. Primary controls are at least 56px; custom ETA/cancellation use accessible sheets. Test actual CSS viewport/display scaling, not physical resolution.
+
+### Toppings
+
+Owners/managers use **Меню → Добавки и соусы** to set composition, image, dish price/portion, standalone price/portion and explicit dish assignments. Standalone offers appear as ordinary products in that category. One availability switch controls both uses; workers can change only availability. Each selected topping is one portion per dish, multiplied by dish quantity. Existing unlinked options remain supported. Deleting the standalone offer removes its current assignments, while historical receipts retain purchased snapshots. Menu copying creates independent unavailable destination products/toppings, not synchronized menus.
 
 ## Handle orders
 

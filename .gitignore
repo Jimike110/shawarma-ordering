@@ -19,3 +19,6 @@ scripts/pitch/
 /compose.pitch*.yaml
 privacy-journal/
 **/deletions.jsonl
+*.jks
+*.keystore
+signing.properties

@@ -41,8 +41,11 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
   await expect(card).toBeVisible({ timeout: 12000 });
   await card.getByRole('button', { name: 'Начать готовить' }).click();
   await expect(card.getByRole('button', { name: 'Заказ готов' })).toBeVisible();
-  await card.getByLabel('Минут для заказа ' + number).fill('22');
-  await card.getByRole('button', { name: 'Сохранить время заказа ' + number }).click();
+  await card.getByRole('button', { name: 'Своё время', exact: true }).click();
+  const etaSheet = kitchen.getByRole('dialog');
+  await etaSheet.getByLabel('Минут для заказа ' + number).fill('22');
+  await etaSheet.getByRole('button', { name: 'Сохранить время заказа ' + number }).click();
+  await expect(etaSheet).not.toBeVisible();
   await card.getByRole('button', { name: 'Заказ готов' }).click();
   // Customer page is untouched: this assertion verifies live polling, not a reload.
   await expect(page.getByRole('heading', { name: 'Горячая. Ваша.' })).toBeVisible({

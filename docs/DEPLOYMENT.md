@@ -189,6 +189,12 @@ Use synthetic or explicitly approved smoke data. Browser storage belongs to an o
 
 Functions do not run the standalone server's hourly maintenance loop or Compose backup service. Arrange those jobs externally. Polling creates repeated requests; measure actual provider usage instead of assuming a free plan will always suffice.
 
+## Trial kitchen cutover
+
+Back up and rehearse migrations `005_kitchen_devices.sql`/`006_toppings.sql` on disposable data before upgrading the API/frontend together. Create shared store access through the owner dashboard, approve retained devices, and review/disable obsolete individual worker accounts explicitly. Do not delete historical actors. Back up the Android signing key separately; install the [matching signed APK](../android-kitchen/README.md) without deploying an incompatible origin/backend combination.
+
+The trial gate includes owner menu/branding approval, actual Teclast tests in both orientations and with the screen locked, and an operating-day soak. Check coverage with zero connected devices: it must warn while intake continues. All existing infrastructure/privacy/backup gates still apply. These repository changes do not authorize publishing documents, activating retention, deploying or changing production data.
+
 ## Troubleshooting
 
 | Symptom | Likely check |

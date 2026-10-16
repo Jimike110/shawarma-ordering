@@ -522,6 +522,7 @@ export function HistoryPanel({
   );
 }
 interface Event {
+  device_label?: string;
   id: number;
   actor: string;
   store_id: number | null;
@@ -598,7 +599,8 @@ export function ActivityPanel({
             <div>
               <strong>{actionLabels[e.action] ?? e.action}</strong>
               <small>
-                {e.actor} ·{' '}
+                {e.actor}
+                {e.device_label ? ' · ' + e.device_label : ''} ·{' '}
                 {new Date(e.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}
                 {e.store_id
                   ? ' · ' +

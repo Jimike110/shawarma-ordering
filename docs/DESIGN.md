@@ -16,6 +16,12 @@ The product is pickup ordering for stores within one business. Design must not i
 
 The font choice was inspired by the supplied Wildberries/RWB careers reference. The bundled font is independently licensed Inter, not a copied proprietary brand font.
 
+### Я@Ша review sample
+
+Append `?brand_preview=olive` to a storefront or kitchen URL and reload to see the proposed shared tokens: primary `#5D6B4B`, supporting olive `#C2C97B`, background `#F4F5EF`, white surfaces, text `#242821`. The banner identifies this as a review sample. Removing the query and reloading restores the current treatment. It is intentionally not enabled globally before owner review.
+
+Locally licensed Lobster approximates the sign's lettering in the sample wordmark/customer display headings; it is not a verified font identification or approved logo. Keep the saved business name and use Inter for prices, forms and kitchen operations. Preserve labelled warning/error/status distinctions. Review the sample with the owner before expanding the treatment.
+
 ## Content accuracy
 
 Use locally hosted shop photos whose sources/checksums are recorded in [the menu manifest](../config/menu.json). Do not replace them with generated food, stock photography or runtime Yandex hotlinks.
@@ -60,6 +66,8 @@ Current customer tracking has **no sound or vibration**. Background push/SMS is 
 
 ## Kitchen
 
+Use the actual CSS viewport/display scaling on the Teclast, not physical pixels. At 1100+ CSS pixels show three independently scrolling lanes with sticky counts; at 800–1099 keep new orders beside a preparation/ready pane; below 800 use one queue with status filters. Use 56px primary targets and approximately 18px operational text. Keep address, intake, connection and monitoring visible. Quantities, toppings/portions, comments and ETA precede the primary action. Custom ETA and destructive actions use accessible sheets; polling must preserve scroll/focus.
+
 Phones have three stable bottom destinations: Orders, Menu and Settings. Reserve bottom/safe-area padding. Larger screens use ordinary navigation and compact queue columns.
 
 Orders show status, number, purchased items, permitted personal fields, ETA and total before actions. Queue counters filter status, and overdue/new-order notices remain visible.
@@ -74,7 +82,7 @@ Orders show status, number, purchased items, permitted personal fields, ETA and 
 | Product deletion | Management permission, explicit destructive confirmation |
 | Pause/resume | Narrow operational update; cannot override owner stop |
 
-Kitchen sound defaults on per visit. Distinguish active, muted and browser-blocked/loading states. Retain pending alerts until activation/loading succeeds, while respecting deliberate mute. Audio is an enhancement to an open queue, not guaranteed background delivery.
+Browser kitchen sound defaults on per visit and repeats while any confirmed/last-known order is new. Distinguish active, explicitly stopped and browser-blocked/loading states. Stopping monitoring leaves a persistent warning and never saves a permanent silent preference. Inside Android, native audio is the sole engine and background monitoring is explicit. Neither UI claims guaranteed audible delivery; volume, power, network and real-device checks remain necessary.
 
 ## Owner workspace
 

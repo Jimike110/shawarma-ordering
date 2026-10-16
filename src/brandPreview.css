@@ -1,0 +1,68 @@
+/* Explicit owner-review sample. It is not the approved production wordmark. */
+@font-face {
+  font-family: Lobster;
+  src: url('/fonts/Lobster-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+:root[data-brand-preview='olive'] {
+  --brand-primary: #5d6b4b;
+  --brand-support: #c2c97b;
+  --brand-background: #f4f5ef;
+  --brand-text: #242821;
+  --orange: var(--brand-primary);
+  --dark: var(--brand-text);
+  --cream: var(--brand-background);
+  --line: #dfe3d7;
+  --muted: #626b58;
+  color: var(--brand-text);
+  background: var(--brand-background);
+}
+[data-brand-preview='olive'] body {
+  color: var(--brand-text);
+  background: var(--brand-background);
+}
+[data-brand-preview='olive'] .brand > span:last-child,
+[data-brand-preview='olive'] .restaurant-heading h1,
+[data-brand-preview='olive'] .category-heading {
+  font-family: Lobster, Inter, sans-serif;
+  font-weight: 400;
+}
+[data-brand-preview='olive'] .brand {
+  font-size: 30px;
+  line-height: 1.2;
+}
+[data-brand-preview='olive'] .brand-mark {
+  background: var(--brand-support);
+  color: var(--brand-text);
+}
+[data-brand-preview='olive'] .button:not(.secondary):not(.danger) {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: #fff;
+}
+[data-brand-preview='olive'] .kitchen-tablet,
+[data-brand-preview='olive'] .kitchen-tablet h1,
+[data-brand-preview='olive'] .kitchen-tablet h2 {
+  font-family: Inter, sans-serif;
+}
+[data-brand-preview='olive'] .kitchen-lane {
+  background: #e9eddf;
+}
+[data-brand-preview='olive'] .kitchen-lane-new {
+  background: #ecefce;
+}
+[data-brand-preview='olive'] .kitchen-heading {
+  background: var(--brand-background);
+}
+.brand-preview-banner {
+  padding: 8px 16px;
+  background: #ecefce;
+  color: #242821;
+  text-align: center;
+  font:
+    14px/1.4 Inter,
+    sans-serif;
+  border-bottom: 1px solid #ccd3be;
+}

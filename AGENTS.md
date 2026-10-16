@@ -18,6 +18,10 @@ Use [README.md](README.md) as the documentation entry point. Development, operat
 - Guest names/comments are optional and require separate consent. Unpublished privacy documents block new intake.
 - Privacy erasure requires explicit activation and maintenance; document publication does not enable it.
 - Kitchen sound is implemented and starts enabled. **Customer sound/vibration was removed by the user.** Do not restore it implicitly.
+- Trial kitchens use one store-bound shared account and owner-approved devices; personal owner/manager accounts remain. Remembered access has a 30-day absolute deadline. Password rotation/device revocation must stop web access and native monitoring. Audit the account and device, not a claimed employee identity.
+- Kitchen alerts repeat every 15 seconds until no `new` orders remain. Offline devices do not stop intake. See `android-kitchen/README.md` for signing, installation and mandatory actual-tablet acceptance. Never commit signing secrets or claim unconditional sound delivery.
+- Canonical toppings share availability across dish extras and a standalone product. Preserve legacy options, receipt snapshots and store-local copying. Owner menu/compositions still require review before import.
+- Olive/Lobster branding is an opt-in `?brand_preview=olive` sample pending owner approval; Inter stays operational. Do not activate it globally before that review.
 - AI, delivery, online payments, customer accounts, Web Push/SMS, two-factor authentication and email invitations are outside the current implementation.
 - Local development uses the base Compose file **plus `compose.vite.yaml`**. Go is not hot-reloaded.
 - Netlify/Go/Neon is the existing demonstration deployment, with a separate repository/site/database per business. Russian real-data production infrastructure remains an unresolved launch requirement. Do not silently substitute a host or deploy.
@@ -49,6 +53,8 @@ Do not print `.env`, passwords, cookies, tokens or connection URLs. Do not commi
 | `privacy*.go` in that directory | Documents, requests, retention, journal and evidence |
 | `schema.sql`, `migrations/*.sql` in that directory | Embedded transactional migrations |
 | `backend/cmd/` | Server, migration, account, maintenance and function entry points |
+| `kitchen_devices.go`, `toppings.go` | Shared device authorization/health and store toppings |
+| `android-kitchen/` | Restricted WebView, Keystore, foreground monitor and native audio |
 
 Keep auth context imports acyclic: screen/provider component files must not define the context identity imported by their descendants. That formerly caused “Missing staff authentication” during Vite refresh. Error recovery must not clear saved orders or resubmit checkout.
 

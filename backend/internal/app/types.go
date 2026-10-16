@@ -11,6 +11,7 @@ import (
 )
 
 type Product struct {
+	ToppingID   int64           `json:"topping_id,omitempty"`
 	ID          int64           `json:"id"`
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
@@ -25,9 +26,12 @@ type Product struct {
 	Options     []ProductOption `json:"options"`
 }
 type ProductOption struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	Price int    `json:"price"`
+	Portion   string `json:"portion,omitempty"`
+	Available *bool  `json:"available,omitempty"`
+	ToppingID int64  `json:"topping_id,omitempty"`
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	Price     int    `json:"price"`
 }
 type OpeningHours struct {
 	Day   int    `json:"day"`
@@ -63,6 +67,7 @@ type Checkout struct {
 	Privacy    *PrivacyChoice `json:"privacy,omitempty"`
 }
 type OrderItem struct {
+	Portion   string          `json:"portion,omitempty"`
 	ProductID int64           `json:"product_id"`
 	Name      string          `json:"name"`
 	Price     int             `json:"price"`

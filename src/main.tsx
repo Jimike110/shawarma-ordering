@@ -27,6 +27,15 @@ import { OwnerPrivacy } from './pages/OwnerPrivacy';
 import { OwnerLayout } from './ownerWorkspace';
 import { AppErrorBoundary, RecoveryScreen, RouteErrorBoundary } from './ErrorBoundary';
 import './styles.css';
+import './brandPreview.css';
+if (new URLSearchParams(window.location.search).get('brand_preview') === 'olive') {
+  document.documentElement.dataset.brandPreview = 'olive';
+  const banner = document.createElement('div');
+  banner.className = 'brand-preview-banner';
+  banner.textContent =
+    'Образец оформления для согласования · Lobster — приближение, название точки не изменено';
+  document.body.prepend(banner);
+}
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route errorElement={<RouteErrorBoundary />}>

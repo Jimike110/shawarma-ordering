@@ -204,6 +204,31 @@ Actions are `verify`, `export`, `block`, `correct`, `erase`, `resolve`. Verifica
 
 These endpoints do not verify identity automatically, send correspondence, install a scheduler or sign statutory acts. See [privacy operations](../PRIVACY_OPERATIONS.md).
 
+## Shared kitchen devices and toppings
+
+Shared login accepts `device_label` alongside username/password. New devices return **202** with `approval_required`, `pairing_code`, `expires_at` and `device_label`, plus a secure HttpOnly `kitchen_device` cookie. No business data is exposed before approval. Existing approved devices can authenticate at another store without reapproval. Identity adds `account_type` (`person`/`kitchen`), `kitchen_store_id`, `device_id` and `device_label`. Shared accounts cannot use personal password change.
+
+| Method | Route | Authorization / purpose |
+| --- | --- | --- |
+| POST | `/api/auth/device-session` | Origin + device cookie; poll approval, then issue staff session |
+| POST | `/api/auth/refresh` | Origin + approved device cookie; renew within original 30-day deadline |
+| GET | `/api/owner/kitchen-access` | Owner; shared accounts, devices, online/health flags |
+| PUT | `/api/owner/stores/{id}/kitchen-access` | Recent owner confirmation; `{username,active,rotate_password?,end_sessions?}`; saves end existing account sessions; generated `password` shown once |
+| POST | `/api/owner/kitchen-devices/{id}` | Recent owner confirmation; `{action:"approve"}` or `revoke` |
+| POST | `/api/kitchen-device/native-token` | Approved shared staff session + Origin; restricted native credential |
+| GET | `/api/kitchen-device/alerts` | Restricted bearer only; store-bound new-order IDs/numbers and server time |
+| POST | `/api/kitchen-device/heartbeat` | Restricted bearer only; native health |
+| POST | `/api/staff/device-heartbeat` | Approved shared staff session + Origin; browser health |
+| GET | `/api/staff/stores/{storeId}/toppings` | Assigned staff; canonical offers and assignments |
+| POST / PUT | `/api/staff/stores/{storeId}/toppings[/{id}]` | Management; save topping and explicit `product_ids` atomically |
+| PATCH | `/api/staff/stores/{storeId}/toppings/{id}/availability` | Assigned staff; only `{available:boolean}` |
+
+Health payload: `monitoring`, `audio_ready`, `volume` (0–100), `connection_ok`, `app_version`. Web volume is capability only: the browser cannot measure physical output volume. Device offline threshold is 60 seconds; intake does not depend on coverage. Native credentials cannot authorize full-order or mutation endpoints. Short web sessions expire within 12 hours; refresh never extends the absolute remembered deadline. Rotation/disabling/revocation invalidates refresh and native authorization too.
+
+Topping fields: `name`, `description`, `image`, `ingredients`, `allergens`, `available`, `extra_price`, `extra_portion`, `standalone_price`, `standalone_portion`, `product_ids`. `standalone_product_id` is server-owned. Both prices are integer rubles. Canonical options add optional `topping_id`, `portion`, `available` while retaining existing option ID checkout format. An omitted availability field on legacy options means available. Each option can be selected once per dish; quantities multiply the full unit price. Receipts snapshot product portions and selected topping labels/portions/prices. Full-product saves cannot overwrite canonical extras. Deleting a standalone offer uses the existing authorized product DELETE and removes its current topping relationships.
+
+Menu copying remaps canonical toppings/assignments into the destination, creates needed standalone offers and starts all copies unavailable. Accepted retry results remain immutable; historical order items are never rewritten.
+
 ## Legacy compatibility
 
 `/api/kitchen/login`, `logout` and `session` alias current authentication. Kitchen order/product/settings aliases remain anchored to original store 1 and enforce current permissions, including DELETE.

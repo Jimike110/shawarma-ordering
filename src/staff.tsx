@@ -8,12 +8,16 @@ import { Loading, Notice } from './ui';
 import { MenuProvider } from './menu';
 import { Kitchen } from './pages/Kitchen';
 import { StoreReports } from './pages/Reports';
+import { nativeKitchenAction } from './nativeKitchen';
 
 export function StaffAuth() {
   const [user, setUser] = useState<StaffAccount | null>(null),
     [loading, setLoading] = useState(true),
     [error, setError] = useState('');
-  const invalidate = useCallback(() => setUser(null), []);
+  const invalidate = useCallback(() => {
+    nativeKitchenAction('logout');
+    setUser(null);
+  }, []);
   const reload = useCallback(async () => {
     try {
       setUser(await api<StaffAccount>('/auth/me'));
@@ -77,18 +81,63 @@ function Login() {
     [password, setPassword] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
+  const [deviceLabel, setDeviceLabel] = useState('Кухня');
+  type PendingDevice = {
+    approval_required: true;
+    pairing_code: string;
+    expires_at: string;
+    device_label: string;
+  };
+  const [pending, setPending] = useState<PendingDevice | null>(null);
+  useEffect(() => {
+    if (!pending) return;
+    let alive = true;
+    const c = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const result = await api<StaffAccount | PendingDevice>('/auth/device-session', {
+          method: 'POST',
+          body: '{}',
+          signal: c.signal,
+        });
+        if (alive && !('approval_required' in result)) {
+          nativeKitchenAction('session-changed');
+          setUser(result);
+          return;
+        }
+      } catch (e) {
+        if (!alive) return;
+        setError(errorMessage(e));
+        if (e instanceof ApiError && [401, 403, 410].includes(e.status)) {
+          setPending(null);
+          return;
+        }
+      }
+      if (alive) timer = setTimeout(poll, 3000);
+    };
+    void poll();
+    return () => {
+      alive = false;
+      c.abort();
+      clearTimeout(timer);
+    };
+  }, [pending, setUser]);
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
     setError('');
     try {
-      setUser(
-        await api<StaffAccount>('/auth/login', {
-          method: 'POST',
-          body: json({ username, password }),
-        }),
-      );
+      const result = await api<StaffAccount | PendingDevice>('/auth/login', {
+        method: 'POST',
+        body: json({ username, password, device_label: deviceLabel }),
+      });
+      if ('approval_required' in result) setPending(result);
+      else {
+        nativeKitchenAction('session-changed');
+        setUser(result);
+      }
       setPassword('');
     } catch (e) {
       setError(errorMessage(e));
@@ -99,34 +148,68 @@ function Login() {
   return (
     <main className="container login">
       <form className="panel login-card" onSubmit={submit}>
-        <h1>Вход для сотрудников</h1>
-        <p>Войдите под своей учётной записью.</p>
-        <label>
-          Логин
-          <input
-            required
-            autoComplete="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            maxLength={60}
-            disabled={busy}
-          />
-        </label>
-        <label>
-          Пароль
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={busy}
-          />
-        </label>
-        {error && <Notice>{error}</Notice>}
-        <button className="button full" disabled={busy}>
-          {busy ? 'Входим…' : 'Войти'}
-        </button>
+        <h1>{pending ? 'Подтвердите устройство' : 'Вход в кухню'}</h1>
+        {pending ? (
+          <section className="device-pairing" aria-live="polite">
+            <p>
+              Владелец должен подтвердить это устройство в разделе «Сотрудники → Кухни и
+              устройства».
+            </p>
+            <strong className="pairing-code">{pending.pairing_code}</strong>
+            <p>{pending.device_label} · заявка действует 10 минут</p>
+            <p>После подтверждения вход продолжится автоматически.</p>
+            {error && <Notice>{error}</Notice>}
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => {
+                setPending(null);
+                setError('');
+              }}
+            >
+              Другой логин
+            </button>
+          </section>
+        ) : (
+          <>
+            <p>Введите общий логин точки или личный логин владельца / управляющего.</p>
+            <label>
+              Логин
+              <input
+                required
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                maxLength={60}
+                disabled={busy}
+              />
+            </label>
+            <label>
+              Название устройства
+              <input
+                value={deviceLabel}
+                maxLength={100}
+                onChange={(e) => setDeviceLabel(e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <label>
+              Пароль
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={busy}
+              />
+            </label>
+            {error && <Notice>{error}</Notice>}
+            <button className="button full" disabled={busy}>
+              {busy ? 'Входим…' : 'Войти'}
+            </button>
+          </>
+        )}
         <p className="fine-print">Забыли пароль? Обратитесь к владельцу.</p>
         <p className="fine-print">
           <Link to="/privacy">Политика обработки данных</Link> ·{' '}
@@ -138,13 +221,14 @@ function Login() {
   );
 }
 export function PasswordForm({ required = false }: { required?: boolean }) {
-  const { setUser, logout } = useAuth();
+  const { user, setUser, logout } = useAuth();
   const [current, setCurrent] = useState(''),
     [password, setPassword] = useState(''),
     [confirmation, setConfirmation] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [done, setDone] = useState(false);
+  if (user?.account_type === 'kitchen') return <Navigate to="/kitchen" replace />;
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (password !== confirmation) {
@@ -274,12 +358,12 @@ export function StaffTop() {
     <>
       <div className="staff-top">
         <Link to={user?.owner ? '/owner' : '/staff/choose'}>{user?.display_name}</Link>
-        <Link to="/staff/account">Пароль</Link>
+        {user?.account_type !== 'kitchen' && <Link to="/staff/account">Пароль</Link>}
         <button
           className="text-link"
           onClick={() => void logout().catch((e) => setError(errorMessage(e)))}
         >
-          Выйти
+          {user?.account_type === 'kitchen' ? 'Выйти / сменить точку' : 'Выйти'}
         </button>
       </div>
       {error && <Notice>{error}</Notice>}
@@ -307,7 +391,7 @@ export function StoreWorkspace({ reports = false }: { reports?: boolean }) {
   return (
     <StaffStoreContext.Provider value={{ id, role, request }}>
       <MenuProvider key={id + ':' + user!.id} endpoint={'/staff/stores/' + id + '/menu'}>
-        <div className="container">
+        <div className={'container' + (!reports ? ' staff-kitchen-identity' : '')}>
           <StaffTop />
         </div>
         {reports ? <StoreReports /> : <Kitchen key={id + ':' + user!.id} />}

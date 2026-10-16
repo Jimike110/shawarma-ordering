@@ -31,6 +31,10 @@ class FakeAudio extends EventTarget {
     stop: this.stop,
     onended: null,
   });
+  finish() {
+    this.source?.onended?.();
+  }
+  source: { onended: (() => void) | null } | null = null;
   constructor() {
     super();
     contexts.push(this);
@@ -46,7 +50,43 @@ beforeEach(() => {
   );
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+it('repeats known pending orders every fifteen seconds, stops on server confirmation and resumes for another order', async () => {
+  vi.useFakeTimers();
+  const hook = renderHook(() => useKitchenSound());
+  await flush();
+  const context = contexts[0];
+  const original = context.createBufferSource;
+  context.createBufferSource = () => {
+    const source = original();
+    context.source = source;
+    return source;
+  };
+  act(() => hook.result.current.setPending(true));
+  expect(context.start).toHaveBeenCalledTimes(1);
+  act(() => vi.advanceTimersByTime(15000));
+  expect(context.start).toHaveBeenCalledTimes(1); // Still playing: never overlap.
+  act(() => context.finish());
+  act(() => vi.advanceTimersByTime(1000));
+  expect(context.start).toHaveBeenCalledTimes(2);
+  act(() => hook.result.current.setPending(false));
+  expect(context.stop).toHaveBeenCalled();
+  act(() => vi.advanceTimersByTime(30000));
+  expect(context.start).toHaveBeenCalledTimes(2);
+  act(() => hook.result.current.setPending(true));
+  expect(context.start).toHaveBeenCalledTimes(3);
+  hook.unmount();
+});
+it('leaves all playback to Android inside the privileged WebView', async () => {
+  const hook = renderHook(() => useKitchenSound(true));
+  await flush();
+  act(() => hook.result.current.setPending(true));
+  expect(contexts).toHaveLength(0);
+  expect(fetch).not.toHaveBeenCalled();
+  hook.unmount();
 });
 async function flush() {
   await act(async () => {

@@ -87,12 +87,12 @@ func Hash(value string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-const productCols = "id,name,description,price,image,weight,category,available,sort_order,ingredients,allergens,options"
+const productCols = "id,name,description,price,image,weight,category,available,sort_order,ingredients,allergens,options,COALESCE(topping_id,0)"
 
 func scanProduct(row interface{ Scan(...any) error }) (Product, error) {
 	var p Product
 	var raw []byte
-	e := row.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.Image, &p.Weight, &p.Category, &p.Available, &p.SortOrder, &p.Ingredients, &p.Allergens, &raw)
+	e := row.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.Image, &p.Weight, &p.Category, &p.Available, &p.SortOrder, &p.Ingredients, &p.Allergens, &raw, &p.ToppingID)
 	if e == nil {
 		e = json.Unmarshal(raw, &p.Options)
 	}
@@ -165,6 +165,36 @@ func (s *Store) SaveProduct(ctx context.Context, p Product) (Product, error) {
 	if _, e = tx.ExecContext(ctx, "SELECT id FROM stores WHERE id=$1 FOR UPDATE", shopID(ctx)); e != nil {
 		return p, e
 	}
+	// Canonical extras are owned by the topping catalogue, never by a full-product payload.
+	legacy := []ProductOption{}
+	for _, o := range p.Options {
+		if o.ToppingID == 0 {
+			legacy = append(legacy, o)
+		}
+	}
+	if p.ID != 0 {
+		current, err := scanProduct(tx.QueryRowContext(ctx, "SELECT "+productCols+" FROM products WHERE id=$1 AND store_id=$2", p.ID, shopID(ctx)))
+		if err == sql.ErrNoRows {
+			return p, ErrMissing
+		}
+		if err != nil {
+			return p, err
+		}
+		if current.ToppingID != 0 {
+			return p, problem(400, "Измените позицию в разделе «Добавки и соусы».")
+		}
+		for _, o := range current.Options {
+			if o.ToppingID != 0 {
+				legacy = append(legacy, o)
+			}
+		}
+	}
+	p.ToppingID = 0
+	p.Options = legacy
+	if e = p.Validate(); e != nil {
+		return p, e
+	}
+	raw, _ = json.Marshal(p.Options)
 	if p.ID == 0 {
 		e = tx.QueryRowContext(ctx, "INSERT INTO products(name,description,price,image,weight,category,available,sort_order,ingredients,allergens,options,store_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id", p.Name, p.Description, p.Price, p.Image, p.Weight, p.Category, p.Available, p.SortOrder, p.Ingredients, p.Allergens, raw, shopID(ctx)).Scan(&p.ID)
 	} else {
@@ -197,6 +227,19 @@ func (s *Store) DeleteProduct(ctx context.Context, id int64) error {
 		return e
 	}
 	var name string
+	var topping int64
+	e = tx.QueryRowContext(ctx, "SELECT COALESCE(topping_id,0) FROM products WHERE id=$1 AND store_id=$2", id, shopID(ctx)).Scan(&topping)
+	if e == sql.ErrNoRows {
+		return ErrMissing
+	}
+	if e != nil {
+		return e
+	}
+	if topping != 0 {
+		if e = removeTopping(ctx, tx, topping, shopID(ctx)); e != nil {
+			return e
+		}
+	}
 	e = tx.QueryRowContext(ctx, "DELETE FROM products WHERE id=$1 AND store_id=$2 RETURNING name", id, shopID(ctx)).Scan(&name)
 	if errors.Is(e, sql.ErrNoRows) {
 		return ErrMissing
@@ -321,7 +364,7 @@ func (s *Store) CreateOrder(ctx context.Context, c Checkout, token string) (Orde
 		for _, selected := range line.Options {
 			found := false
 			for _, option := range p.Options {
-				if option.ID == selected {
+				if option.ID == selected && (option.Available == nil || *option.Available) {
 					unitPrice += option.Price
 					options = append(options, option)
 					found = true
@@ -336,7 +379,7 @@ func (s *Store) CreateOrder(ctx context.Context, c Checkout, token string) (Orde
 			return Order{}, problem(409, "Цена изменилась. Обновите меню и проверьте корзину.")
 		}
 		total += unitPrice * line.Quantity
-		items = append(items, OrderItem{ProductID: p.ID, Name: p.Name, Price: unitPrice, Quantity: line.Quantity, Options: options})
+		items = append(items, OrderItem{ProductID: p.ID, Name: p.Name, Price: unitPrice, Quantity: line.Quantity, Options: options, Portion: p.Weight})
 	}
 	var queued int
 	if e = tx.QueryRowContext(ctx, "SELECT count(*) FROM orders WHERE store_id=$1 AND status IN ('new','preparing')", shopID(ctx)).Scan(&queued); e != nil {
@@ -445,7 +488,11 @@ func (s *Store) UpdateOrder(ctx context.Context, id int64, u OrderUpdate) (Order
 		if actor(ctx).ID > 0 {
 			aid = actor(ctx).ID
 		}
-		if _, e = tx.ExecContext(ctx, "INSERT INTO order_events(order_id,store_id,actor_id,status) VALUES($1,$2,$3,$4)", id, shopID(ctx), aid, o.Status); e != nil {
+		var did any
+		if actor(ctx).DeviceID > 0 {
+			did = actor(ctx).DeviceID
+		}
+		if _, e = tx.ExecContext(ctx, "INSERT INTO order_events(order_id,store_id,actor_id,status,device_id) VALUES($1,$2,$3,$4,$5)", id, shopID(ctx), aid, o.Status, did); e != nil {
 			return o, e
 		}
 	}

@@ -67,7 +67,9 @@ export function Shop() {
     ? (lines.find((l) => lineKey(l) === lineKey(detailLine))?.quantity ?? 0)
     : 0;
   const capacity = Math.min(20 - detailQty, remaining);
-  const invalidOptions = options.some((id) => !detailProduct?.options?.some((o) => o.id === id));
+  const invalidOptions = options.some(
+    (id) => !detailProduct?.options?.some((o) => o.id === id && o.available !== false),
+  );
   function showDetails(product: Product) {
     setSelected(product);
     setOptions([]);
@@ -387,6 +389,7 @@ export function Shop() {
                       <label key={o.id} className={options.includes(o.id) ? 'option-selected' : ''}>
                         <input
                           type="checkbox"
+                          disabled={o.available === false && !options.includes(o.id)}
                           checked={options.includes(o.id)}
                           onChange={(e) => {
                             setOptions(
@@ -397,7 +400,11 @@ export function Shop() {
                             setDetailCount(1);
                           }}
                         />
-                        <span>{o.label}</span>
+                        <span>
+                          {o.label}
+                          {o.portion ? ` · ${o.portion}` : ''}
+                          {o.available === false ? ' · Недоступно' : ''}
+                        </span>
                         <b>{o.price ? '+' + rub(o.price) : '0 ₽'}</b>
                       </label>
                     ))}

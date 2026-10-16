@@ -17,6 +17,7 @@ The project uses React, TypeScript and Vite, a Go HTTP API, and PostgreSQL. It r
 | Set up privacy documents, cleanup or recovery | [Privacy operations](PRIVACY_OPERATIONS.md) |
 | Run tests and interpret their results | [Testing guide](docs/TEST_RESULTS.md) |
 | Change the interface | [Design guide](docs/DESIGN.md) |
+| Build/install the private kitchen APK | [Android kitchen guide](android-kitchen/README.md) |
 | Hand the repository to another developer or agent | [Agent handoff](AGENTS.md) |
 
 **A working local app is not a completed production launch.** The existing Netlify/Neon setup is a demonstration deployment. Russian production infrastructure, operator approval, backups, monitoring and release checks remain separate requirements. See the [launch gates](docs/DEPLOYMENT.md#production-launch-gates).
@@ -100,7 +101,7 @@ The normal PostgreSQL volume survives `down`. Run the start command again to res
 
 A person can manage one store and work at another. Owners can access all stores in the business. Separate businesses use separate deployments and databases.
 
-Not implemented: delivery, online payments, customer accounts, loyalty, financial reconciliation, AI features, customer sound/vibration, Web Push, SMS, two-factor authentication or email invitations. Kitchen sound requires an open, running page and remains subject to browser/device restrictions.
+Not implemented: delivery, online payments, customer accounts, loyalty, financial reconciliation, AI features, customer sound/vibration, Web Push, SMS, two-factor authentication or email invitations. Browser kitchen alerts require a running page. The private Android app provides native background monitoring; physical-tablet acceptance is required before relying on it in a shift.
 
 ## Important behaviour
 

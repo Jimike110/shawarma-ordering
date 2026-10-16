@@ -1,4 +1,5 @@
 export interface Product {
+  topping_id?: number;
   id: number;
   name: string;
   description: string;
@@ -16,6 +17,9 @@ export interface ProductOption {
   id: string;
   label: string;
   price: number;
+  portion?: string;
+  available?: boolean;
+  topping_id?: number;
 }
 export interface OpeningHours {
   day: number;
@@ -61,6 +65,10 @@ export interface Store {
 export type IntakeBlocker =
   'archived' | 'unpublished' | 'privacy_unpublished' | 'owner_stopped' | 'paused' | 'outside_hours';
 export interface StaffAccount {
+  account_type?: 'person' | 'kitchen';
+  kitchen_store_id?: number;
+  device_id?: number;
+  device_label?: string;
   id: number;
   username: string;
   display_name: string;
@@ -78,6 +86,7 @@ export interface CartLine {
   options?: string[];
 }
 export interface OrderItem {
+  portion?: string;
   product_id: number;
   name: string;
   price: number;

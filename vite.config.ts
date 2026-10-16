@@ -10,7 +10,15 @@ export default defineConfig({
           watch: {
             usePolling: true,
             interval: 300,
-            ignored: ['**/backups/**', '**/artifacts/**', '**/dist/**', '**/backend/**'],
+            // Native builds are unrelated to HMR; polling them across the Windows
+            // bind mount can block even ordinary page/API requests.
+            ignored: [
+              '**/backups/**',
+              '**/artifacts/**',
+              '**/dist/**',
+              '**/backend/**',
+              '**/android-kitchen/**',
+            ],
           },
         }
       : {}),
@@ -29,6 +37,7 @@ export default defineConfig({
         '**/backups/**',
         '**/artifacts/**',
         '**/backend/**',
+        '**/android-kitchen/**',
       ],
     },
     proxy: {

@@ -202,9 +202,12 @@ export function Tracking() {
           >
             <span>
               {item.quantity} × {item.name}
+              {item.portion && <span className="receipt-options">{item.portion}</span>}
               {!!item.options?.length && (
                 <small className="receipt-options">
-                  {item.options.map((o) => o.label).join(', ')}
+                  {item.options
+                    .map((o) => o.label + (o.portion ? ' · ' + o.portion : ''))
+                    .join(', ')}
                 </small>
               )}
             </span>

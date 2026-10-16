@@ -67,7 +67,9 @@ export function invalidLine(line: CartLine, products: Product[]) {
   const product = products.find((p) => p.id === line.product_id);
   return (
     !product?.available ||
-    (line.options ?? []).some((id) => !product.options?.some((o) => o.id === id))
+    (line.options ?? []).some(
+      (id) => !product.options?.some((o) => o.id === id && o.available !== false),
+    )
   );
 }
 export function optionLabels(line: CartLine, product?: Product) {

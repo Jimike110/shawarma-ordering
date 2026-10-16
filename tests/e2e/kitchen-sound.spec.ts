@@ -47,7 +47,7 @@ test('kitchen plays the selected local recording with default sound and mute/rel
   expect(await page.evaluate(() => (window as any).__kitchenAudio.starts)).toBe(0);
   // Any ordinary kitchen action activates audio: no explicit sound toggle needed.
   await page.getByRole('button', { name: 'Обновить кухню', exact: true }).click();
-  await expect(sound).toHaveText('Звук включён');
+  await expect(sound).toHaveText('Остановить оповещения');
   const now = new Date().toISOString();
   orders = [
     {
@@ -70,13 +70,19 @@ test('kitchen plays the selected local recording with default sound and mute/rel
   expect(decoded.duration).toBeGreaterThan(2);
   expect(decoded.duration).toBeLessThan(5);
   expect(decoded.hasSamples).toBe(true);
+  // No new ID is needed: the same unattended order repeats after fifteen seconds.
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__kitchenAudio.starts), { timeout: 19000 })
+    .toBe(2);
   await sound.click();
   await expect(sound).toHaveAttribute('aria-pressed', 'false');
   expect(await page.evaluate(() => (window as any).__kitchenAudio.stops)).toBe(1);
   orders = [...orders, { ...orders[0], id: 99002, number: 99002 }];
   await page.getByRole('button', { name: 'Обновить кухню', exact: true }).click();
   await expect(page.locator('.kitchen-order')).toHaveCount(2);
-  expect(await page.evaluate(() => (window as any).__kitchenAudio.starts)).toBe(1);
+  expect(await page.evaluate(() => (window as any).__kitchenAudio.starts)).toBe(2);
   await page.reload();
   await expect(sound).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Обновить кухню', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__kitchenAudio.starts)).toBe(1);
 });

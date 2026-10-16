@@ -7,6 +7,33 @@ export class ApiError extends Error {
     super(message);
   }
 }
+let staffRefresh: Promise<boolean> | null = null;
+async function refreshStaffSession() {
+  if (!staffRefresh) {
+    staffRefresh = (async () => {
+      const c = new AbortController();
+      const timer = setTimeout(() => c.abort(), 6000);
+      try {
+        const r = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+          signal: c.signal,
+        });
+        if (r.status >= 500 || r.status === 429)
+          throw new Error('Не удалось продлить вход. Проверьте связь и повторите запрос.');
+        return r.status === 200;
+      } finally {
+        clearTimeout(timer);
+      }
+    })().finally(() => {
+      staffRefresh = null;
+    });
+  }
+  return staffRefresh;
+}
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
   const abort = () => controller.abort(options.signal?.reason);
@@ -19,13 +46,25 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const headers = new Headers(options.headers);
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   try {
-    const response = await fetch('/api' + path, {
-      ...options,
-      credentials: 'same-origin',
-      cache: 'no-store',
-      headers,
-      signal: controller.signal,
-    });
+    const request = () =>
+      fetch('/api' + path, {
+        ...options,
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers,
+        signal: controller.signal,
+      });
+    let response = await request();
+    const staffPath = /^(\/(staff|owner|kitchen)\/|\/auth\/(me|logout|change-password)$)/.test(
+      path,
+    );
+    if (
+      response.status === 401 &&
+      staffPath &&
+      !controller.signal.aborted &&
+      (await refreshStaffSession())
+    )
+      response = await request();
     const data = await response.json().catch(() => null);
     if (!response.ok) {
       if (

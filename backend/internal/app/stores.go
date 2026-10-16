@@ -391,6 +391,17 @@ func (a *API) availability(w http.ResponseWriter, r *http.Request) {
 		fail(w, ErrMissing)
 		return
 	}
+	var toppingID int64
+	if e = tx.QueryRowContext(r.Context(), "SELECT COALESCE(topping_id,0) FROM products WHERE id=$1 AND store_id=$2", id, shopID(r.Context())).Scan(&toppingID); e != nil {
+		fail(w, e)
+		return
+	}
+	if toppingID != 0 {
+		if e = setToppingAvailable(r.Context(), tx, toppingID, shopID(r.Context()), *in.Available); e != nil {
+			fail(w, e)
+			return
+		}
+	}
 	details, _ := json.Marshal(in)
 	if e = auditDetails(r.Context(), tx, "product.availability", fmt.Sprint(id), details); e == nil {
 		e = tx.Commit()
@@ -407,25 +418,30 @@ func auditDetails(ctx context.Context, tx *sql.Tx, action, resource string, deta
 	if name == "" {
 		name = "system"
 	}
-	var aid, sid any
+	var aid, sid, did any
+	if u.DeviceID > 0 {
+		did = u.DeviceID
+	}
 	if u.ID > 0 {
 		aid = u.ID
 	}
 	if id, ok := ctx.Value(storeKey{}).(int64); ok {
 		sid = id
 	}
-	_, e := tx.ExecContext(ctx, "INSERT INTO audit_events(staff_name,actor_id,store_id,action,resource,details) VALUES($1,$2,$3,$4,$5,$6)", name, aid, sid, action, resource, details)
+	_, e := tx.ExecContext(ctx, "INSERT INTO audit_events(staff_name,actor_id,store_id,action,resource,details,device_id) VALUES($1,$2,$3,$4,$5,$6,$7)", name, aid, sid, action, resource, details, did)
 	return e
 }
 
 type Activity struct {
-	ID       int64           `json:"id"`
-	Actor    string          `json:"actor"`
-	StoreID  *int64          `json:"store_id"`
-	Action   string          `json:"action"`
-	Resource string          `json:"resource"`
-	Details  json.RawMessage `json:"details"`
-	At       time.Time       `json:"created_at"`
+	DeviceID    *int64          `json:"device_id,omitempty"`
+	DeviceLabel string          `json:"device_label,omitempty"`
+	ID          int64           `json:"id"`
+	Actor       string          `json:"actor"`
+	StoreID     *int64          `json:"store_id"`
+	Action      string          `json:"action"`
+	Resource    string          `json:"resource"`
+	Details     json.RawMessage `json:"details"`
+	At          time.Time       `json:"created_at"`
 }
 
 // Only owner endpoints accept a reporting filter. Scoped requests keep the
@@ -469,7 +485,7 @@ func (a *API) activity(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	rows, e := a.Store.DB.QueryContext(r.Context(), "SELECT id,staff_name,store_id,action,resource,details,created_at FROM audit_events WHERE ($1::bigint=0 OR store_id=$1) AND ($2::bigint=0 OR id<$2) ORDER BY id DESC LIMIT 100", id, before)
+	rows, e := a.Store.DB.QueryContext(r.Context(), "SELECT id,staff_name,store_id,action,resource,details,created_at,device_id,COALESCE((SELECT label FROM kitchen_devices WHERE id=audit_events.device_id),'') FROM audit_events WHERE ($1::bigint=0 OR store_id=$1) AND ($2::bigint=0 OR id<$2) ORDER BY id DESC LIMIT 100", id, before)
 	if e != nil {
 		fail(w, e)
 		return
@@ -478,7 +494,7 @@ func (a *API) activity(w http.ResponseWriter, r *http.Request) {
 	out := []Activity{}
 	for rows.Next() {
 		var v Activity
-		if e = rows.Scan(&v.ID, &v.Actor, &v.StoreID, &v.Action, &v.Resource, &v.Details, &v.At); e != nil {
+		if e = rows.Scan(&v.ID, &v.Actor, &v.StoreID, &v.Action, &v.Resource, &v.Details, &v.At, &v.DeviceID, &v.DeviceLabel); e != nil {
 			fail(w, e)
 			return
 		}
@@ -553,6 +569,8 @@ func (a *API) copyMenu(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	copied := []Product{}
+	productMapping := map[int64]int64{}
+	sourceProducts := []Product{}
 	for _, id := range in.Products {
 		p, e := scanProduct(tx.QueryRowContext(r.Context(), "SELECT "+productCols+" FROM products WHERE id=$1 AND store_id=$2", id, in.Source))
 		if e == sql.ErrNoRows {
@@ -563,6 +581,15 @@ func (a *API) copyMenu(w http.ResponseWriter, r *http.Request) {
 			fail(w, e)
 			return
 		}
+		sourceProducts = append(sourceProducts, p)
+		legacy := []ProductOption{}
+		for _, o := range p.Options {
+			if o.ToppingID == 0 {
+				legacy = append(legacy, o)
+			}
+		}
+		p.Options = legacy
+		p.ToppingID = 0
 		options, _ := json.Marshal(p.Options)
 		e = tx.QueryRowContext(r.Context(), "INSERT INTO products(name,description,price,image,weight,category,available,sort_order,ingredients,allergens,options,store_id) VALUES($1,$2,$3,$4,$5,$6,false,$7,$8,$9,$10,$11) RETURNING id", p.Name, p.Description, p.Price, p.Image, p.Weight, p.Category, p.SortOrder, p.Ingredients, p.Allergens, options, in.Destination).Scan(&p.ID)
 		if e != nil {
@@ -570,7 +597,13 @@ func (a *API) copyMenu(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		p.Available = false
+		productMapping[id] = p.ID
 		copied = append(copied, p)
+	}
+	copied, e = copyToppings(r.Context(), tx, in.Source, in.Destination, sourceProducts, productMapping, copied)
+	if e != nil {
+		fail(w, e)
+		return
 	}
 	result, _ = json.Marshal(copied)
 	_, e = tx.ExecContext(r.Context(), "INSERT INTO menu_copies VALUES($1,$2,$3,now())", in.Key, hash, result)

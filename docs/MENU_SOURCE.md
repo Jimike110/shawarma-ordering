@@ -22,6 +22,10 @@ Photo URLs, exact checksums, portions and original/display names are recorded in
 
 ## Choose the right operation
 
+For the trial, the owner-supplied current menu determines prices/portions; [this supplied Yandex Eats listing](https://eda.yandex.ru/r/a_sa_restaurant?placeSlug=shaverma_8c72f) is the proposed composition/photo/additive reference. It is not automatically imported or an approval of price differences. Compare exact identities and discrepancies in an ignored review artifact before applying anything; preserve confirmed product/legacy option IDs and all historical receipts. Yandex may require a browser/CAPTCHA, so unavailable fields stay unknown. Use the canonical topping editor for explicit dish assignments and separate extra/standalone prices; do not silently convert old options by matching names.
+
+The dated snapshot helper refuses matches against canonical standalone topping offers, so it cannot silently overwrite their independent catalogue fields. Upgrade the schema before using current import tooling. It is not an importer for the new owner menu.
+
 | Need | Tool | Source/target behaviour |
 | --- | --- | --- |
 | Initial 19-item catalogue | `prepare-menu-import.mjs` | Manifest → reviewed SQL for explicit `STORE_ID` |

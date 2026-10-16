@@ -137,7 +137,7 @@ Core tables represent stores, store settings, products, orders, staff accounts/m
 
 Checkout locks the relevant store before validating intake/products. Retry keys distinguish an accepted attempt from a new order. Current prices, menu edits or privacy publication must not turn an accepted retry into a second order.
 
-Migrations are embedded in Go. `schema.sql` and `002_shop.sql`, `003_access.sql`, `004_privacy.sql` are applied transactionally under a lock and recorded in `schema_migrations`. Add a new migration for later changes.
+Migrations are embedded in Go: `schema.sql` followed by numbered files in `backend/internal/app/migrations/`, including `005_kitchen_devices.sql` and `006_toppings.sql`. They apply transactionally under a lock and are recorded in `schema_migrations`. Add migrations rather than editing already-applied files. The trial migrations preserve current accounts/products/order IDs; shared access is configured explicitly after upgrading. See the [Android build/install guide](../android-kitchen/README.md).
 
 ## Common development problems
 

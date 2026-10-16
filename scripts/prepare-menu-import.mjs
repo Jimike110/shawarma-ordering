@@ -79,6 +79,8 @@ CREATE TEMP TABLE imported_menu ON COMMIT DROP AS
 SELECT * FROM jsonb_to_recordset(convert_from(decode('${catalog}','base64'),'UTF8')::jsonb)
 AS p(name text, price integer, image text, weight text, category text, sort_order integer);
 DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM products p JOIN imported_menu m USING (image) WHERE p.store_id=${storeId} AND p.topping_id IS NOT NULL)
+  THEN RAISE EXCEPTION 'Snapshot matches a canonical topping offer: review identity and use the topping editor instead'; END IF;
   IF EXISTS (SELECT 1 FROM products p JOIN imported_menu m USING (image) WHERE p.store_id=${storeId} GROUP BY p.image HAVING count(*) > 1)
   THEN RAISE EXCEPTION 'Duplicate existing menu photo: resolve product matching before importing'; END IF;
 END $$;

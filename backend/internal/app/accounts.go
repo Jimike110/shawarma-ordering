@@ -36,6 +36,10 @@ type Account struct {
 	PasswordHash     string       `json:"-"`
 	TemporaryUntil   *time.Time   `json:"-"`
 	Version          int64        `json:"-"`
+	AccountType      string       `json:"account_type"`
+	KitchenStoreID   int64        `json:"kitchen_store_id,omitempty"`
+	DeviceID         int64        `json:"device_id,omitempty"`
+	DeviceLabel      string       `json:"device_label,omitempty"`
 }
 type accountKey struct{}
 type storeKey struct{}
@@ -51,6 +55,12 @@ func shopContext(ctx context.Context, id int64) context.Context {
 }
 func actor(ctx context.Context) Account { u, _ := ctx.Value(accountKey{}).(Account); return u }
 func (u Account) Role(id int64) string {
+	if u.AccountType == "kitchen" {
+		if u.KitchenStoreID == id {
+			return "worker"
+		}
+		return ""
+	}
 	if u.Owner {
 		return "owner"
 	}
@@ -104,15 +114,19 @@ func VerifyPassword(hash, password string) bool {
 	return subtle.ConstantTimeCompare(key, argon2.IDKey([]byte(password), salt, 2, 19456, 1, 32)) == 1
 }
 
-const accountCols = "id,username,display_name,phone,email,owner,active,password_required,last_login_at,password_hash,temporary_until,version"
+const accountCols = "id,username,display_name,phone,email,owner,active,password_required,last_login_at,password_hash,temporary_until,version,account_type,COALESCE(kitchen_store_id,0)"
 
 func scanAccount(row interface{ Scan(...any) error }) (Account, error) {
 	var u Account
-	e := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Phone, &u.Email, &u.Owner, &u.Active, &u.PasswordRequired, &u.LastLogin, &u.PasswordHash, &u.TemporaryUntil, &u.Version)
+	e := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Phone, &u.Email, &u.Owner, &u.Active, &u.PasswordRequired, &u.LastLogin, &u.PasswordHash, &u.TemporaryUntil, &u.Version, &u.AccountType, &u.KitchenStoreID)
 	u.Memberships = []Membership{}
 	return u, e
 }
 func (s *Store) memberships(ctx context.Context, u *Account) error {
+	if u.AccountType == "kitchen" {
+		u.Memberships = []Membership{{StoreID: u.KitchenStoreID, Role: "worker"}}
+		return nil
+	}
 	rows, e := s.DB.QueryContext(ctx, "SELECT store_id,role FROM staff_memberships WHERE user_id=$1 ORDER BY store_id", u.ID)
 	if e != nil {
 		return e
@@ -135,7 +149,7 @@ func (s *Store) account(ctx context.Context, id int64) (Account, error) {
 	return u, e
 }
 func (s *Store) Accounts(ctx context.Context) ([]Account, error) {
-	rows, e := s.DB.QueryContext(ctx, "SELECT "+accountCols+" FROM staff_accounts ORDER BY active DESC,display_name,id")
+	rows, e := s.DB.QueryContext(ctx, "SELECT "+accountCols+" FROM staff_accounts WHERE account_type='person' ORDER BY active DESC,display_name,id")
 	if e != nil {
 		return nil, e
 	}
@@ -170,8 +184,9 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username    string `json:"username"`
+		Password    string `json:"password"`
+		DeviceLabel string `json:"device_label"`
 	}
 	if !decode(w, r, &input) || !a.limit(w, r, "login", 10) {
 		return
@@ -198,6 +213,15 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 	}
 	if !VerifyPassword(hash, input.Password) || e != nil || !u.Active || (u.PasswordRequired && (u.TemporaryUntil == nil || !time.Now().Before(*u.TemporaryUntil))) {
 		reply(w, 401, map[string]string{"error": "Неверный логин или пароль."})
+		return
+	}
+	if u.AccountType == "kitchen" {
+		a.kitchenLogin(w, r, u, input.DeviceLabel)
+		return
+	}
+	// An explicit personal login must not silently restore a previous shared login.
+	if e = a.clearDeviceLogin(r.Context(), r); e != nil {
+		fail(w, e)
 		return
 	}
 	token := randomToken()
@@ -251,8 +275,8 @@ func (a *API) authenticated(next http.HandlerFunc, allowPasswordChange bool) htt
 			reply(w, 401, map[string]string{"error": "Войдите в панель сотрудников."})
 			return
 		}
-		var id, version int64
-		e = a.Store.DB.QueryRowContext(r.Context(), "SELECT user_id,account_version FROM sessions WHERE token_hash=$1 AND expires_at>now() AND user_id IS NOT NULL", Hash(c.Value)).Scan(&id, &version)
+		var id, version, deviceID int64
+		e = a.Store.DB.QueryRowContext(r.Context(), "SELECT user_id,account_version,COALESCE(device_id,0) FROM sessions WHERE token_hash=$1 AND expires_at>now() AND user_id IS NOT NULL", Hash(c.Value)).Scan(&id, &version, &deviceID)
 		if e != nil && e != sql.ErrNoRows {
 			fail(w, e)
 			return
@@ -267,6 +291,24 @@ func (a *API) authenticated(next http.HandlerFunc, allowPasswordChange bool) htt
 			reply(w, 401, map[string]string{"error": "Сессия истекла. Войдите снова."})
 			return
 		}
+		if u.AccountType == "kitchen" {
+			var valid bool
+			e = a.Store.DB.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM kitchen_devices WHERE id=$1 AND state='approved' AND user_id=$2 AND store_id=$3 AND account_version=$4 AND login_until>now())", deviceID, u.ID, u.KitchenStoreID, u.Version).Scan(&valid)
+			if e != nil {
+				fail(w, e)
+				return
+			}
+			if !valid {
+				a.cookie(w, "", -1)
+				reply(w, 401, map[string]string{"error": "Доступ устройства завершён. Войдите снова."})
+				return
+			}
+			u.DeviceID = deviceID
+			if e = a.Store.DB.QueryRowContext(r.Context(), "SELECT label FROM kitchen_devices WHERE id=$1", deviceID).Scan(&u.DeviceLabel); e != nil {
+				fail(w, e)
+				return
+			}
+		}
 		if u.PasswordRequired && !allowPasswordChange {
 			reply(w, 403, map[string]string{"error": "Сначала смените временный пароль.", "code": "password_change_required"})
 			return
@@ -278,6 +320,10 @@ func (a *API) authenticated(next http.HandlerFunc, allowPasswordChange bool) htt
 }
 func (a *API) me(w http.ResponseWriter, r *http.Request) { reply(w, 200, actor(r.Context())) }
 func (a *API) logout(w http.ResponseWriter, r *http.Request) {
+	if e := a.clearDeviceLogin(r.Context(), r); e != nil {
+		fail(w, e)
+		return
+	}
 	c, _ := r.Cookie("staff_session")
 	if _, e := a.Store.DB.ExecContext(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", Hash(c.Value)); e != nil {
 		fail(w, e)
@@ -319,6 +365,10 @@ func (a *API) reauthenticate(w http.ResponseWriter, r *http.Request) {
 	reply(w, 200, map[string]bool{"confirmed": true})
 }
 func (a *API) changePassword(w http.ResponseWriter, r *http.Request) {
+	if actor(r.Context()).AccountType == "kitchen" {
+		reply(w, 403, map[string]string{"error": "Пароль точки меняет только владелец."})
+		return
+	}
 	var p struct {
 		Current  string `json:"current_password"`
 		Password string `json:"password"`
@@ -456,6 +506,13 @@ func (s *Store) SaveAccount(ctx context.Context, id int64, in UserInput, hash st
 		return Account{}, problem(409, "Этот логин уже используется.")
 	}
 	if id > 0 {
+		var kind string
+		if e = tx.QueryRowContext(ctx, "SELECT account_type FROM staff_accounts WHERE id=$1", id).Scan(&kind); e != nil {
+			return Account{}, e
+		}
+		if kind != "person" {
+			return Account{}, problem(400, "Общий доступ точки изменяется в разделе устройств кухни.")
+		}
 		var owner, active bool
 		e = tx.QueryRowContext(ctx, "SELECT owner,active FROM staff_accounts WHERE id=$1 FOR UPDATE", id).Scan(&owner, &active)
 		if e == sql.ErrNoRows {
@@ -521,6 +578,13 @@ func (s *Store) SaveAccount(ctx context.Context, id int64, in UserInput, hash st
 	return s.account(ctx, id)
 }
 func (s *Store) ResetPassword(ctx context.Context, id int64, hash string, temporary bool) error {
+	var kind string
+	if e := s.DB.QueryRowContext(ctx, "SELECT account_type FROM staff_accounts WHERE id=$1", id).Scan(&kind); e != nil {
+		return e
+	}
+	if kind != "person" {
+		return problem(400, "Используйте смену пароля общего доступа точки.")
+	}
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
 		return e

@@ -11,3 +11,10 @@ artifacts
 backups
 privacy-journal
 **/deletions.jsonl
+android-kitchen/.gradle
+android-kitchen/.kotlin
+android-kitchen/**/build
+android-kitchen/local.properties
+**/*.jks
+**/*.keystore
+**/signing.properties

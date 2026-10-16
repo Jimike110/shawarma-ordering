@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Browsers may suspend audio until a user gesture. Keep the alert until audio
 // actually runs, rather than silently losing an order received before that tap.
-export function useKitchenSound() {
+export function useKitchenSound(native = false) {
   const [enabled, setEnabled] = useState(true);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
@@ -11,13 +11,15 @@ export function useKitchenSound() {
   const playing = useRef<AudioBufferSourceNode | null>(null);
   const enabledRef = useRef(true),
     pending = useRef(false);
+  const unattended = useRef(false);
+  const lastPlayed = useRef(0);
   const activateRef = useRef<() => void>(() => {});
   const flush = useCallback(() => {
     const context = audio.current;
     if (!enabledRef.current || !pending.current || !buffer.current || context?.state !== 'running')
       return;
     try {
-      playing.current?.stop();
+      if (playing.current) return;
       const source = context.createBufferSource();
       source.buffer = buffer.current;
       source.connect(context.destination);
@@ -26,6 +28,7 @@ export function useKitchenSound() {
         if (playing.current === source) playing.current = null;
       };
       source.start();
+      lastPlayed.current = Date.now();
       playing.current = source;
       pending.current = false;
     } catch {
@@ -35,6 +38,7 @@ export function useKitchenSound() {
     }
   }, []);
   useEffect(() => {
+    if (native) return;
     let mounted = true;
     let loading: Promise<void> | null = null;
     const controller = new AbortController();
@@ -117,13 +121,32 @@ export function useKitchenSound() {
       context?.removeEventListener('statechange', sync);
       if (context && context.state !== 'closed') void context.close().catch(() => {});
     };
-  }, [flush]);
+  }, [flush, native]);
   const alert = useCallback(() => {
     if (!enabledRef.current) return;
     pending.current = true;
     activateRef.current();
     flush();
   }, [flush]);
+  const setPending = useCallback(
+    (value: boolean) => {
+      const first = value && !unattended.current;
+      unattended.current = value;
+      if (!value) {
+        pending.current = false;
+        playing.current?.stop();
+        playing.current = null;
+      } else if (first) alert();
+    },
+    [alert],
+  );
+  useEffect(() => {
+    if (native) return;
+    const timer = setInterval(() => {
+      if (unattended.current && Date.now() - lastPlayed.current >= 15000) alert();
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [alert, native]);
   const toggle = () => {
     if (enabledRef.current && ready) {
       enabledRef.current = false;
@@ -136,7 +159,13 @@ export function useKitchenSound() {
       enabledRef.current = true;
       setEnabled(true);
       activateRef.current();
+      if (unattended.current) alert();
     }
   };
-  return { enabled, ready, error, alert, toggle };
+  const test = () => {
+    enabledRef.current = true;
+    setEnabled(true);
+    alert();
+  };
+  return { enabled, ready, error, alert, toggle, setPending, test };
 }
