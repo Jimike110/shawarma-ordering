@@ -15,7 +15,7 @@
     "check": "npm run test && npm run build"
   },
   "dependencies": {
-    "leaflet": "1.9.4",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
