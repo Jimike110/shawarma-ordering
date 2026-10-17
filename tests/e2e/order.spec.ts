@@ -59,7 +59,7 @@ test('mobile checkout, private tracking auto-refresh, and staff controls', async
   await kitchen.getByRole('button', { name: 'Пауза', exact: true }).click();
   await kitchen.getByLabel('Причина паузы').fill('Проверка интерфейса');
   await kitchen.getByRole('button', { name: 'Приостановить', exact: true }).click();
-  await page.goto('/');
+  await page.goto('/s/belorusskaya-4');
   await expect(
     page.getByRole('status').filter({ hasText: 'Приём заказов временно' }),
   ).toBeVisible();

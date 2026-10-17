@@ -1,44 +1,113 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronDown, MapPin } from 'lucide-react';
 import { useMenu } from './menu';
 import { rememberPickup, usePickupStores } from './pickupStores';
+import { PickupPicker } from './PickupPicker';
+import type { Store } from './types';
 
 export function PickupSelector() {
   const { data: menu } = useMenu();
-  const { data: stores, error } = usePickupStores();
+  const q = usePickupStores();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const open = params.get('pickup') === '1',
+    openedHere = useRef(false);
   const current = menu?.store;
   useEffect(() => {
-    if (current?.slug) rememberPickup(current.slug);
-  }, [current?.slug]);
-  const choices = [...(stores ?? [])];
-  // Pending checkout remains reachable even after its store is hidden.
-  if (current && !choices.some((store) => store.id === current.id)) choices.unshift(current);
+    if (current?.published && !current.archived) rememberPickup(current.slug);
+  }, [current?.slug, current?.published, current?.archived]);
+  const close = () => {
+    if (openedHere.current) {
+      openedHere.current = false;
+      navigate(-1);
+    } else
+      setParams(
+        (old) => {
+          const next = new URLSearchParams(old);
+          next.delete('pickup');
+          return next;
+        },
+        { replace: true },
+      );
+  };
+  function choose(store: Store) {
+    if (store.id === current?.id) {
+      close();
+      return;
+    }
+    rememberPickup(store.slug);
+    navigate('/s/' + store.slug, { replace: true, state: { pickupChanged: true } });
+  }
   return (
-    <label className="pickup-selector">
-      <MapPin size={19} aria-hidden="true" />
-      <span className="pickup-selector-field">
-        <select
-          aria-label="Адрес самовывоза"
-          value={current?.slug ?? ''}
-          disabled={!stores}
-          title={error || menu?.settings.address}
-          onChange={(event) => {
-            const next = choices.find((store) => store.slug === event.target.value);
-            if (!next || next.id === current?.id) return;
-            rememberPickup(next.slug);
-            navigate('/s/' + next.slug);
-          }}
-        >
-          {choices.map((store) => (
-            <option key={store.id} value={store.slug}>
-              {store.settings.address || store.settings.shop_name}
-            </option>
-          ))}
-        </select>
-      </span>
-      <ChevronDown size={16} aria-hidden="true" />
-    </label>
+    <>
+      <button
+        type="button"
+        className="pickup-selector pickup-selector-button"
+        aria-label="Адрес самовывоза"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => {
+          openedHere.current = true;
+          setParams((old) => {
+            const next = new URLSearchParams(old);
+            next.set('pickup', '1');
+            return next;
+          });
+        }}
+      >
+        <MapPin size={19} />
+        <span className="pickup-selector-field">
+          <small>Самовывоз</small>
+          <strong>{current?.settings.address || 'Выбрать точку'}</strong>
+        </span>
+        <ChevronDown size={16} />
+      </button>
+      {open &&
+        createPortal(
+          <PickupDialog close={close}>
+            <PickupPicker
+              stores={q.data ?? []}
+              current={current}
+              onChoose={choose}
+              close={close}
+              error={q.error}
+              refresh={q.refresh}
+            />
+          </PickupDialog>,
+          document.body,
+        )}
+    </>
+  );
+}
+function PickupDialog({ children, close }: { children: ReactNode; close: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const trigger = document.activeElement as HTMLElement | null;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    ref.current?.showModal();
+    return () => {
+      ref.current?.close();
+      document.body.style.overflow = previous;
+      trigger?.focus();
+    };
+  }, []);
+  return (
+    <dialog
+      className="pickup-dialog"
+      ref={ref}
+      aria-label="Где заберёте заказ?"
+      onCancel={(e) => {
+        e.preventDefault();
+        close();
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) close();
+      }}
+    >
+      {children}
+    </dialog>
   );
 }

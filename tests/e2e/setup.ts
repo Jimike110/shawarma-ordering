@@ -15,6 +15,20 @@ export default async function setup() {
     },
   });
   if (!response.ok()) throw new Error('Fixture owner login failed: ' + response.status());
+  const menu = await (await context.get('/api/staff/stores/1/menu')).json();
+  if (!menu.settings.address || menu.settings.latitude == null) {
+    const configured = await context.put('/api/staff/stores/1/settings', {
+      headers: { Origin: new URL(origin).origin },
+      data: {
+        ...menu.settings,
+        address: 'Белорусская ул., 4',
+        city: 'Санкт-Петербург',
+        latitude: 59.935643,
+        longitude: 30.499839,
+      },
+    });
+    if (!configured.ok()) throw new Error('Fixture pickup setup failed: ' + configured.status());
+  }
   // Explicit synthetic operator for the disposable stack only; application seeds stay blank.
   const privacy = await (await context.get('/api/owner/privacy')).json();
   if (!privacy.current) {

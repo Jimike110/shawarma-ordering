@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"sort"
 	"strings"
@@ -39,6 +40,10 @@ type OpeningHours struct {
 	Close string `json:"close"`
 }
 type Settings struct {
+	Latitude        *float64       `json:"latitude"`
+	Longitude       *float64       `json:"longitude"`
+	Landmark        string         `json:"landmark"`
+	Entrance        string         `json:"entrance"`
 	Paused          bool           `json:"paused"`
 	PrepMinutes     int            `json:"prep_minutes"`
 	PauseMessage    string         `json:"pause_message"`
@@ -203,6 +208,15 @@ func (p *Product) Validate() error {
 	return nil
 }
 func (s Settings) Validate() error {
+	if (s.Latitude == nil) != (s.Longitude == nil) {
+		return problem(400, "Укажите обе координаты точки или оставьте обе пустыми.")
+	}
+	if s.Latitude != nil && (math.IsNaN(*s.Latitude) || math.IsInf(*s.Latitude, 0) || *s.Latitude < -90 || *s.Latitude > 90 || math.IsNaN(*s.Longitude) || math.IsInf(*s.Longitude, 0) || *s.Longitude < -180 || *s.Longitude > 180) {
+		return problem(400, "Проверьте координаты точки на карте.")
+	}
+	if utf8.RuneCountInString(s.Landmark) > 150 || utf8.RuneCountInString(s.Entrance) > 300 {
+		return problem(400, "Ориентир: до 150 символов; вход: до 300 символов.")
+	}
 	if s.PrepMinutes < 1 || s.PrepMinutes > 120 || utf8.RuneCountInString(s.PauseMessage) > 300 {
 		return problem(400, "Время приготовления: от 1 до 120 минут.")
 	}

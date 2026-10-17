@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import {
   ArrowUpRight,
@@ -25,6 +25,12 @@ import {
 import { rub, type Product, type Settings } from './types';
 export function Layout({ neutral = false }: { neutral?: boolean }) {
   const location = useLocation();
+  const [pickupChanged, setPickupChanged] = useState(false);
+  useEffect(() => {
+    setPickupChanged(location.state?.pickupChanged === true);
+    const timer = setTimeout(() => setPickupChanged(false), 6000);
+    return () => clearTimeout(timer);
+  }, [location.key]);
   const { data } = useMenu();
   const shopPath = useShopPath();
   useEffect(() => {
@@ -65,12 +71,22 @@ export function Layout({ neutral = false }: { neutral?: boolean }) {
             </span>
           </Link>
           {!neutral && <PickupSelector />}
+          {neutral && (
+            <Link className="text-link" to="/locations">
+              Выбрать точку
+            </Link>
+          )}
           <Link to={neutral ? '/' : shopPath + '#menu'} className="header-link">
             Меню <ShoppingBag size={16} />
           </Link>
         </div>
       </header>
       <div id="main-content">
+        {pickupChanged && (
+          <p className="pickup-change-notice" role="status">
+            Точка изменена. Корзина предыдущей точки сохранена.
+          </p>
+        )}
         <Outlet />
       </div>
       <footer className="footer container">

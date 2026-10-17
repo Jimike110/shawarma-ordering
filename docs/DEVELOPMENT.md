@@ -84,6 +84,16 @@ The host Vite proxy defaults to `http://127.0.0.1:8080`. The normal Docker API r
 
 ## Environment reference
 
+### Pickup map
+
+No map API key is required for the initial Leaflet/OpenStreetMap integration. Owners/managers configure latitude, longitude, **«Метро или ориентир»** and **«Как найти вход»** under their store's kitchen **«Настройки → Расположение для гостей»**. Supply both coordinates or neither. Do not infer coordinates from an address or geocode every visitor's request.
+
+Migration `007_pickup_locations.sql` adds nullable pins and location descriptions. It seeds only the supplied Белорусская ул., 4 pin when the existing organization link and address match; other stores remain unset. Existing receipt snapshots are unchanged. Apply migrations before releasing the matching API/frontend; local Go requires rebuilding as usual.
+
+`src/PickupMap.tsx` isolates the tile provider. The current public tile service is best-effort, with no SLA. Retain attribution, normal browser caching, and the tile image's origin-only Referrer-Policy; no bulk downloads/offline prefetch. Automated browser tests intercept tile requests. Review the [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/) and choose an appropriate provider before sustained production traffic. Public maps send connection/view information to the provider: include it in the operator's processing/location review and approved privacy documents. Choosing a free map does not settle Russian production data-location requirements. No publication is automatic.
+
+### Backend environment
+
 Never put backend secrets in React source, `VITE_*` variables or committed files.
 
 | Variable | Used by | Meaning |

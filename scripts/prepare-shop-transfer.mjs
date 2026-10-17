@@ -69,6 +69,9 @@ const pick = (object, keys) =>
   );
 const products = menu.products.map((product) => pick(product, productKeys));
 const settings = pick(menu.settings, settingKeys);
+// Optional for sources predating pickup pins; do not invent missing coordinates.
+for (const key of ['latitude', 'longitude', 'landmark', 'entrance'])
+  if (Object.hasOwn(menu.settings, key)) settings[key] = menu.settings[key];
 const seen = new Set();
 for (const product of products) {
   const expected = manifest.products.find((item) => item.image === product.image);
@@ -96,6 +99,10 @@ const defaults = {
   hours_note: '',
   opening_hours: [],
   schedule_enabled: false,
+  latitude: null,
+  longitude: null,
+  landmark: '',
+  entrance: '',
 };
 const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64');
 const generatedAt = new Date().toISOString();
@@ -150,11 +157,14 @@ BEGIN
     paused=v.paused, prep_minutes=v.prep_minutes, pause_message=v.pause_message,
     shop_name=v.shop_name, address=v.address, city=v.city, phone=v.phone,
     hours_note=v.hours_note, map_url=v.map_url, opening_hours=v.opening_hours,
-    schedule_enabled=v.schedule_enabled, demo_mode=v.demo_mode
+    schedule_enabled=v.schedule_enabled, demo_mode=v.demo_mode,
+    latitude=CASE WHEN source_settings ? 'latitude' THEN v.latitude ELSE s.latitude END,
+    longitude=CASE WHEN source_settings ? 'longitude' THEN v.longitude ELSE s.longitude END,
+    landmark=COALESCE(v.landmark,s.landmark), entrance=COALESCE(v.entrance,s.entrance)
   FROM jsonb_to_record(source_settings) AS v(
     paused boolean, prep_minutes integer, pause_message text, shop_name text, address text,
     city text, phone text, hours_note text, map_url text, opening_hours jsonb,
-    schedule_enabled boolean, demo_mode boolean)
+    schedule_enabled boolean, demo_mode boolean,latitude double precision,longitude double precision,landmark text,entrance text)
   WHERE s.id=${storeId};
   INSERT INTO audit_events(staff_name,store_id,action,resource)
   VALUES ('local-shop-transfer',${storeId},'shop.import','public-local-snapshot:${generatedAt}');

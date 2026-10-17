@@ -43,6 +43,7 @@ const router = createBrowserRouter(
       <Route path="/consent" element={<Privacy consent />} />
       <Route element={<PickupStoresProvider />}>
         <Route path="/" element={<StorePicker />} />
+        <Route path="/locations" element={<StorePicker alwaysChoose />} />
         <Route path="/s/:slug" element={<CustomerScope />}>
           <Route index element={<Shop />} />
           <Route path="checkout" element={<Checkout />} />

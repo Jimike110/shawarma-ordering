@@ -139,6 +139,8 @@ Operational PATCH fields: `paused`, `prep_minutes`, `reason`. A pause needs a re
 
 ### Products and settings
 
+Store settings also accept nullable `latitude`/`longitude` (both present or both null), `landmark` (up to 150 Unicode characters) and `entrance` (up to 300). Coordinates must be finite and within geographic bounds. These fields are returned in public store/menu settings and may only be edited by the existing management settings endpoint. Worker operations payloads cannot change them. Older receipt/settings snapshots may omit them.
+
 Products use `name`, `description`, `price`, `image`, `weight`, `category`, `available`, `sort_order`, `ingredients`, `allergens`, `options`.
 
 An option is `{"id":"extra-cheese","label":"Дополнительный сыр","price":50}`. Preserve stable IDs when changing text/prices. Images accept local `/images/…` or HTTPS paths. Unknown composition fields may stay empty.

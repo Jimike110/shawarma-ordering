@@ -27,7 +27,14 @@ export function preferredPickup(stores: Store[]): Store | undefined {
     const saved = stores.find((store) => store.slug === slug);
     if (saved) return saved;
   } catch {}
-  return stores[0];
+  return undefined;
+}
+export function hasRememberedPickup(): boolean {
+  try {
+    return !!localStorage.getItem(selectedKey);
+  } catch {
+    return false;
+  }
 }
 export function rememberPickup(slug: string) {
   try {

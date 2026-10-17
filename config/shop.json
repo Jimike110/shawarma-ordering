@@ -3,6 +3,8 @@
   "address": "Белорусская ул., 4",
   "city": "Санкт-Петербург",
   "map_url": "https://yandex.ru/maps/org/ya_lyublyu_shavermu/223602659821/",
+  "latitude": 59.935643,
+  "longitude": 30.499839,
   "schedule_enabled": true,
   "opening_hours": [
     { "day": 0, "open": "09:00", "close": "22:00" },

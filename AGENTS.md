@@ -12,7 +12,7 @@ Use [README.md](README.md) as the documentation entry point. Development, operat
 
 ## Current scope and decisions
 
-- Customers select a pickup address in the header and keep a separate basket and pending checkout per store.
+- First-time customers choose a pickup point using the map/list picker; `/locations` always reopens it. The header opens the same picker. Keep explicit store/QR links, per-store baskets and frozen checkout attempts. Location permission is gesture-only; never persist guest coordinates. Store pins/landmarks/entrances are manager/owner settings, not worker controls.
 - `/orders` holds browser-local history. Private links use `/track#TOKEN`; order numbers are not lookup credentials.
 - Staff enter at `/kitchen`. Owner routes are `/owner`, `/owner/stores`, `/owner/staff`, `/owner/analytics` and secondary `/owner/privacy`.
 - Guest names/comments are optional and require separate consent. Unpublished privacy documents block new intake.

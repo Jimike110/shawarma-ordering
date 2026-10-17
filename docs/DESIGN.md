@@ -34,7 +34,15 @@ Unknown composition/allergen information should be visibly unconfirmed, not infe
 
 ### Catalogue and store selection
 
-The header contains the pickup-address dropdown. The root route opens the last available selection or a published fallback; stable `/s/:slug` links identify a store.
+The root route asks first-time guests **«Где заберёте заказ?»** with a map and address list. It may reopen an explicitly remembered, currently accepting store; never silently choose the first store. `/locations` always shows selection, while `/s/:slug` and store QR links open their destination directly. If a remembered location is unavailable, explain it and offer alternatives.
+
+The header's **«Адрес самовывоза»** button opens the same picker in a desktop dialog/full-screen mobile view. Tapping an address previews its location on the map; tapping a pin selects its address. Neither navigates. A single **«Перейти к меню»** button below the map confirms the selected point. Keep this confirmation in the normal scroll flow, without a fixed bottom bar. Closed/paused stores remain labelled and browsable; unpublished/archived stores stay hidden. Preserve baskets when switching and leave accepted orders at their original pickup point. Browser Back, Escape and focus restoration must work.
+
+Prioritize the address, verified landmark and actual intake reason. Put hours, entrance details and Yandex directions under **«О точке и маршрут»**. Do not overload location selection with preparation estimates or operational filters. **«Рядом со мной»** requests location only after a gesture, sorts approximate straight-line distances locally and never stores guest coordinates. Do not invent walking times or infer that a point is on someone's route.
+
+On mobile, use one vertical scroll area: the page itself, or the full-screen dialog. Never nest a separately scrolling address list or trap swipes over the map. Touch maps start as scroll-through previews with tappable pins; **«Двигать карту»** explicitly enables map gestures and **«Готово»** restores page scrolling. Keep the close action reachable and support short viewports when the keyboard is open.
+
+The free initial map uses lazy-loaded Leaflet and OpenStreetMap raster tiles, with visible attribution. Selection must work through the list when tiles fail. Keep map-provider use out of kitchen monitoring and normal menu loads. Locations without verified coordinates remain in the list without an invented pin.
 
 Keep the selected address prominent through catalogue, basket and checkout. Switching stores preserves separate baskets without transferring products. Clear stale store data and abort obsolete requests.
 

@@ -13,6 +13,12 @@ async function confirm(request: APIRequestContext) {
 async function fits(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
+async function choosePickup(page: Page, address: string) {
+  await page.getByRole('button', { name: 'Адрес самовывоза', exact: true }).click();
+  const picker = page.getByRole('dialog', { name: 'Где заберёте заказ?' });
+  await picker.getByRole('button', { name: 'Выбрать точку: ' + address, exact: true }).click();
+  await picker.getByRole('button', { name: 'Перейти к меню', exact: true }).click();
+}
 
 test('owner workspace and account management fit phones and desktop', async ({ page, request }) => {
   await confirm(request);
@@ -230,10 +236,7 @@ test('separate store baskets, independent menu copies and cross-store checkout r
     );
     await write(request, '/owner/stores/' + shop.id, { published: true }, 'PATCH');
     await page.goto('/');
-    await expect(page.getByRole('combobox', { name: 'Адрес самовывоза' })).toBeVisible();
-    await expect(page.getByRole('combobox', { name: 'Адрес самовывоза' })).toHaveValue(
-      'belorusskaya-4',
-    );
+    await expect(page.getByRole('button', { name: 'Адрес самовывоза' })).toBeVisible();
     for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: width > 720 ? 1000 : 844 });
       await fits(page);
@@ -242,23 +245,23 @@ test('separate store baskets, independent menu copies and cross-store checkout r
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/s/belorusskaya-4');
     await page.getByRole('button', { name: 'В корзину: ' + original.name }).click();
-    await page.getByRole('combobox', { name: 'Адрес самовывоза' }).selectOption('second-e2e');
+    await choosePickup(page, shop.settings.address);
     await expect(page).toHaveURL(/\/s\/second-e2e$/);
     await page.goto('/');
     await expect(page).toHaveURL(/\/s\/second-e2e$/);
-    await expect(page.getByRole('combobox', { name: 'Адрес самовывоза' })).toHaveValue(
-      'second-e2e',
+    await expect(page.getByRole('button', { name: 'Адрес самовывоза' })).toContainText(
+      shop.settings.address,
     );
     await expect(page.getByRole('button', { name: 'Открыть корзину' })).toHaveCount(0);
     await page.getByRole('button', { name: 'В корзину: Ленская классическая' }).click();
-    await page.getByRole('combobox', { name: 'Адрес самовывоза' }).selectOption('belorusskaya-4');
+    await choosePickup(page, current.settings.address);
     await page.getByRole('button', { name: 'Открыть корзину' }).click();
     await expect(page.getByRole('dialog', { name: 'Ваш заказ' })).toContainText(original.name);
     await page
       .getByRole('dialog', { name: 'Ваш заказ' })
       .getByRole('button', { name: 'Закрыть корзину' })
       .click();
-    await page.getByRole('combobox', { name: 'Адрес самовывоза' }).selectOption('second-e2e');
+    await choosePickup(page, shop.settings.address);
     await page.getByRole('button', { name: 'Открыть корзину' }).click();
     await page.getByRole('button', { name: 'Оформить заказ' }).click();
     await expect(page).toHaveURL(/\/s\/second-e2e\/checkout$/);

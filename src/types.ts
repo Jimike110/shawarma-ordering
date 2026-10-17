@@ -27,6 +27,10 @@ export interface OpeningHours {
   close: string;
 }
 export interface Settings {
+  latitude?: number | null;
+  longitude?: number | null;
+  landmark?: string;
+  entrance?: string;
   paused: boolean;
   prep_minutes: number;
   pause_message: string;

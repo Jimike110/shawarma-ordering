@@ -835,6 +835,66 @@ function SettingsForm({
             onChange={(e) => change({ ...value, map_url: e.target.value })}
           />
         </label>
+        <fieldset className="pickup-location-editor">
+          <legend>Расположение для гостей</legend>
+          <p className="field-hint">
+            Укажите проверенные координаты входа. Без координат точка останется в списке, но не
+            будет показана меткой на карте.
+          </p>
+          <div className="form-row">
+            <label>
+              Широта
+              <input
+                type="number"
+                min={-90}
+                max={90}
+                step="any"
+                value={value.latitude ?? ''}
+                placeholder="59.935643"
+                onChange={(e) =>
+                  change({
+                    ...value,
+                    latitude: e.target.value === '' ? null : Number(e.target.value),
+                  })
+                }
+              />
+            </label>
+            <label>
+              Долгота
+              <input
+                type="number"
+                min={-180}
+                max={180}
+                step="any"
+                value={value.longitude ?? ''}
+                placeholder="30.499839"
+                onChange={(e) =>
+                  change({
+                    ...value,
+                    longitude: e.target.value === '' ? null : Number(e.target.value),
+                  })
+                }
+              />
+            </label>
+          </div>
+          <label>
+            Метро или ориентир
+            <input
+              maxLength={150}
+              value={value.landmark ?? ''}
+              onChange={(e) => change({ ...value, landmark: e.target.value })}
+            />
+          </label>
+          <label>
+            Как найти вход
+            <textarea
+              maxLength={300}
+              rows={2}
+              value={value.entrance ?? ''}
+              onChange={(e) => change({ ...value, entrance: e.target.value })}
+            />
+          </label>
+        </fieldset>
         <label>
           Примечание о часах работы
           <input
