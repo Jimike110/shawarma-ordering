@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { AppErrorBoundary, RecoveryScreen, RouteErrorBoundary } from './ErrorBoundary';
 import { readAttempt } from './checkoutAttempt';
@@ -9,6 +9,14 @@ function BrokenScreen(): never {
 }
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+afterEach(() => window.history.replaceState({}, '', '/'));
+it('keeps Telegram recovery inside its customer entry and preserves the frozen attempt', () => {
+  window.history.replaceState({}, '', '/tg/s/example/checkout');
+  render(<RecoveryScreen />);
+  expect(screen.getByRole('link', { name: 'Вернуться в меню' })).toHaveAttribute('href', '/tg/');
+  expect(screen.getByRole('link', { name: 'Мои заказы' })).toHaveAttribute('href', '/tg/orders');
+  expect(screen.getByText(/сначала проверьте «Мои заказы»/)).toBeVisible();
 });
 it('catches staff render errors without exposing exception details or losing the recovery route', () => {
   const router = createMemoryRouter(

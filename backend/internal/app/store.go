@@ -22,6 +22,7 @@ type Store struct {
 	DB          *sql.DB
 	PrivacyKey  string
 	JournalPath string
+	Telegram    TelegramConfig
 }
 
 func Open(ctx context.Context, dsn string) (*Store, error) {
@@ -340,6 +341,9 @@ func (s *Store) CreateOrder(ctx context.Context, c Checkout, token string) (Orde
 	if e != nil {
 		return Order{}, e
 	}
+	if e = s.checkTelegramCheckout(ctx, tx, c); e != nil {
+		return Order{}, e
+	}
 	if !published || archived || stopped {
 		return Order{}, problem(409, "Точка сейчас не принимает заказы.")
 	}
@@ -410,6 +414,9 @@ func (s *Store) CreateOrder(ctx context.Context, c Checkout, token string) (Orde
 		if _, e = tx.ExecContext(ctx, "INSERT INTO privacy_evidence(order_ref,purpose,version_id,accepted) VALUES($1,'optional_name_preparation',$2,true)", o.ID, version); e != nil {
 			return Order{}, e
 		}
+	}
+	if e = s.attachTelegram(ctx, tx, c, o.ID); e != nil {
+		return Order{}, e
 	}
 	return o, tx.Commit()
 }
@@ -484,6 +491,9 @@ func (s *Store) UpdateOrder(ctx context.Context, id int64, u OrderUpdate) (Order
 		return o, e
 	}
 	if previousStatus != o.Status {
+		if e = enqueueTelegram(ctx, tx, id, o.Status); e != nil {
+			return o, e
+		}
 		var aid any
 		if actor(ctx).ID > 0 {
 			aid = actor(ctx).ID

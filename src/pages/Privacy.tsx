@@ -5,7 +5,13 @@ import { usePolling } from '../usePolling';
 import { Loading, Notice } from '../ui';
 import type { PrivacyDocument } from '../privacy';
 
-export function Privacy({ consent = false }: { consent?: boolean }) {
+export function Privacy({
+  consent = false,
+  telegram = false,
+}: {
+  consent?: boolean;
+  telegram?: boolean;
+}) {
   const [params] = useSearchParams();
   const version = params.get('version');
   const load = useCallback(
@@ -23,7 +29,11 @@ export function Privacy({ consent = false }: { consent?: boolean }) {
         ← В меню
       </Link>
       <h1>
-        {consent ? 'Согласие на необязательные данные' : 'Политика обработки персональных данных'}
+        {telegram
+          ? 'Согласие на уведомления в Telegram'
+          : consent
+            ? 'Согласие на необязательные данные'
+            : 'Политика обработки персональных данных'}
       </h1>
       {loading && !data ? (
         <Loading />
@@ -35,7 +45,11 @@ export function Privacy({ consent = false }: { consent?: boolean }) {
             · {data.template_version}
           </p>
           <article className="panel privacy-document">
-            {consent ? data.consent : data.policy}
+            {telegram
+              ? data.telegram_consent || 'Для этой версии согласие Telegram не опубликовано.'
+              : consent
+                ? data.consent
+                : data.policy}
           </article>
           <p>
             <Link to={(consent ? '/privacy' : '/consent') + '?version=' + data.id}>

@@ -11,6 +11,7 @@ import { FrozenMenuProvider, MenuProvider, useMenu } from '../menu';
 import { pendingAtSlug } from '../checkoutAttempt';
 import { CartProvider } from '../cart';
 import { Layout, Loading, Notice } from '../ui';
+import { inTelegramEntry } from '../telegram';
 
 export function StorePicker({ alwaysChoose = false }: { alwaysChoose?: boolean }) {
   const q = usePickupStores();
@@ -55,7 +56,7 @@ export function StorePicker({ alwaysChoose = false }: { alwaysChoose?: boolean }
         />
         <div className="pickup-page-links">
           <Link to="/privacy">Политика обработки данных</Link>
-          <Link to="/kitchen">Вход для сотрудников</Link>
+          {!inTelegramEntry() && <Link to="/kitchen">Вход для сотрудников</Link>}
         </div>
       </main>
     );
@@ -69,9 +70,11 @@ export function StorePicker({ alwaysChoose = false }: { alwaysChoose?: boolean }
         </button>
       )}
       {q.data?.length === 0 && <p>Сейчас нет опубликованных точек.</p>}
-      <Link className="staff-link" to="/kitchen">
-        Вход для сотрудников
-      </Link>
+      {!inTelegramEntry() && (
+        <Link className="staff-link" to="/kitchen">
+          Вход для сотрудников
+        </Link>
+      )}
       <Link className="text-link" to="/orders">
         Мои заказы
       </Link>

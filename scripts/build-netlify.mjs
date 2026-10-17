@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { writeTelegramFunctions } from './telegram-functions.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -10,7 +10,7 @@ function run(exe, args, options = {}) {
 }
 run(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit']);
 run(process.execPath, ['node_modules/vite/bin/vite.js', 'build']);
-mkdirSync(path.join(root, 'netlify/functions'), { recursive: true });
+writeTelegramFunctions(root, process.env.TELEGRAM_DISPATCH_SCHEDULED === 'true');
 run(
   'go',
   [

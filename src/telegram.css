@@ -1,0 +1,36 @@
+:root {
+  --tg-top: 0px;
+  --tg-bottom: 0px;
+}
+body {
+  padding-top: var(--tg-top);
+  padding-bottom: var(--tg-bottom);
+}
+.header {
+  top: var(--tg-top);
+}
+@media (max-width: 720px) {
+  .checkout-submit {
+    padding-bottom: calc(12px + max(env(safe-area-inset-bottom), var(--tg-bottom)));
+  }
+  .checkout {
+    padding-bottom: calc(120px + var(--tg-bottom));
+  }
+}
+.telegram-notifications {
+  margin-top: 20px;
+}
+.telegram-notifications .privacy-check {
+  min-height: 48px;
+}
+.telegram-order-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+.telegram-order-actions button {
+  min-height: 48px;
+}
+.order-summary .cart-line-copy {
+  overflow-wrap: anywhere;
+}

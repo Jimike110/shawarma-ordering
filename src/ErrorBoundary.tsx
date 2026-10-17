@@ -14,9 +14,11 @@ export function RecoveryScreen({
   useEffect(() => {
     heading.current?.focus();
   }, []);
-  const staff = /^\/(owner|staff)(\/|$)/.test(pathname) || pathname === '/kitchen';
-  const checkout = pathname === '/checkout' || /^\/s\/[^/]+\/checkout\/?$/.test(pathname);
-  const tracking = pathname === '/track';
+  const telegram = /^\/tg(?:\/|$)/.test(window.location.pathname);
+  const customerPath = pathname.replace(/^\/tg(?=\/|$)/, '') || '/';
+  const staff = !telegram && (/^\/(owner|staff)(\/|$)/.test(pathname) || pathname === '/kitchen');
+  const checkout = customerPath === '/checkout' || /^\/s\/[^/]+\/checkout\/?$/.test(customerPath);
+  const tracking = customerPath === '/track' || /^\/order\//.test(customerPath);
   const missing = status === 404;
   const denied = status === 401 || status === 403;
   return (
@@ -59,11 +61,11 @@ export function RecoveryScreen({
               Обновить страницу
             </button>
           )}
-          <a className="button secondary" href={staff ? '/kitchen' : '/'}>
+          <a className="button secondary" href={staff ? '/kitchen' : telegram ? '/tg/' : '/'}>
             {staff ? 'Открыть панель' : 'Вернуться в меню'}
           </a>
           {!staff && (
-            <a className="recovery-history" href="/orders">
+            <a className="recovery-history" href={telegram ? '/tg/orders' : '/orders'}>
               Мои заказы
             </a>
           )}

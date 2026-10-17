@@ -12,6 +12,11 @@
   status = 200
   force = true
 [[redirects]]
+  from = "/tg/*"
+  to = "/.netlify/functions/telegram-entry"
+  status = 200
+  force = true
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

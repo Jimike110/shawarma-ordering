@@ -13,7 +13,7 @@ import (
 	"unicode/utf8"
 )
 
-const privacyTemplate = "ru-2026-10-v2"
+const privacyTemplate = "ru-2026-10-v3"
 
 type Operator struct {
 	Kind         string `json:"kind"`
@@ -26,14 +26,16 @@ type Operator struct {
 	Locations    string `json:"locations"`
 	StaffBasis   string `json:"staff_basis"`
 	Approved     bool   `json:"approved"`
+	Telegram     bool   `json:"telegram_notifications,omitempty"`
 }
 type PrivacyDocument struct {
-	ID          int64     `json:"id"`
-	Template    string    `json:"template_version"`
-	Operator    Operator  `json:"operator"`
-	Policy      string    `json:"policy"`
-	Consent     string    `json:"consent"`
-	PublishedAt time.Time `json:"published_at"`
+	ID              int64     `json:"id"`
+	Template        string    `json:"template_version"`
+	Operator        Operator  `json:"operator"`
+	Policy          string    `json:"policy"`
+	Consent         string    `json:"consent"`
+	TelegramConsent string    `json:"telegram_consent"`
+	PublishedAt     time.Time `json:"published_at"`
 }
 type PrivacyChoice struct {
 	NoticeVersion  int64 `json:"notice_version"`
@@ -41,13 +43,14 @@ type PrivacyChoice struct {
 	Accepted       bool  `json:"accepted"`
 }
 type PrivacyState struct {
-	Draft            Operator         `json:"draft"`
-	Revision         int64            `json:"revision"`
-	Current          *PrivacyDocument `json:"current"`
-	RetentionEnabled bool             `json:"retention_enabled"`
-	LastMaintenance  *time.Time       `json:"last_maintenance_at"`
-	PreviewPolicy    string           `json:"preview_policy"`
-	PreviewConsent   string           `json:"preview_consent"`
+	Draft                  Operator         `json:"draft"`
+	Revision               int64            `json:"revision"`
+	Current                *PrivacyDocument `json:"current"`
+	RetentionEnabled       bool             `json:"retention_enabled"`
+	LastMaintenance        *time.Time       `json:"last_maintenance_at"`
+	PreviewPolicy          string           `json:"preview_policy"`
+	PreviewConsent         string           `json:"preview_consent"`
+	PreviewTelegramConsent string           `json:"preview_telegram_consent"`
 }
 
 func (o Operator) validate(publish bool) error {
@@ -94,13 +97,23 @@ func privacyTexts(o Operator) (string, string) {
 	identity := fmt.Sprintf("Оператор: %s. ИНН %s, ОГРН/ОГРНИП %s. Адрес: %s. Контакт по персональным данным: %s.", o.LegalName, o.INN, o.Registration, o.Address, o.Contact)
 	policy := identity + `\n\n1. Заказ и получение\nСервис принимает гостевые заказы с оплатой при получении. Для исполнения договора обрабатываются состав, стоимость, точка выдачи, номер, время и статус заказа, технические ключи повтора и личной ссылки. Получение возможно только по номеру: имя и комментарий не обязательны. Основание необходимой обработки — исполнение договора (п. 5 ч. 1 ст. 6 152-ФЗ).\n\n2. Необязательные данные\nИмя для выдачи и предпочтения по приготовлению обрабатываются только по отдельному согласию. Не указывайте сведения о здоровье, платёжные данные или данные других людей. Специальные категории данных не запрашиваются. Отказ от согласия не мешает заказу по номеру.\n\n3. Получатели и места обработки\nДоступ имеют только уполномоченные сотрудники в пределах обязанностей. Обработчики и услуги: ` + o.Contractors + `. Места обработки, хранения, журналов и резервных копий: ` + o.Locations + `. Поручения обработчикам и правовые основания утверждает оператор. Продажа данных, реклама, доставка, SMS и онлайн-оплата в сервисе не предусмотрены.\n\n4. Сроки\nИмя, комментарий и свободный текст отмены удаляются через семь дней после закрытия заказа; до закрытия нужны для исполнения. Индивидуальная квитанция, личная ссылка, состав, сумма и события хранятся один год после закрытия, затем удаляются; остаются сводные показатели без идентификаторов гостей. У старых заказов срок отсчитывается от исторического времени обновления; это не измерение приготовления. Минимальные доказательства согласия и обработки обращений хранятся отдельно три года для защиты прав, по утверждённой оператором политике. Минимальные технические метки истёкших ключей предотвращают повторное создание заказа и не содержат его состава или персональных полей. Счётчики безопасности очищаются в пределах 24 часов, рабочий аудит — через год. Контактные и отображаемые данные отключённых сотрудников удаляются через 90 дней; ссылки на действия остаются обезличенными.\n\n5. Cookies и браузер\nДля входа сотрудников используются необходимые защищённые HttpOnly-cookies: короткая сессия до 12 часов и подтверждение одобренного устройства до одного года. Общий вход кухни запоминается на 30 дней от входа, без продления этого срока при обновлении сессии. Для безопасности и контроля уведомлений сохраняются заданная метка устройства, привязка к точке, версия приложения, время связи и техническое состояние оповещений; отпечатки оборудования и браузера не собираются. В Android-приложении ограниченный ключ уведомлений защищён Android Keystore. Общая учётная запись и устройство не устанавливают личность сотрудника, выполнившего действие. Корзины, выбранная точка и личные ссылки истории сохраняются в этом браузере; незавершённая отправка — в хранилище вкладки до результата. Их можно удалить настройками браузера. Удаление истории лишает доступа к личным ссылкам и не удаляет записи оператора. Внешние рекламные/аналитические cookies не устанавливаются приложением. Хостинг может обрабатывать технические сведения подключения в пределах своего поручения.\n\n6. Права и обращения\nПо указанному контакту можно запросить доступ, уточнение, блокирование спорных данных, отзыв согласия и удаление. Сообщите номер/дату/точку заказа и способ обратной связи. Оператор соразмерно проверяет принадлежность данных (например, личная ссылка вместе с деталями покупки или проверка на месте), не запрашивая загрузку паспорта в сервис. Личная ссылка сама по себе не открывает имя и комментарий. Отзыв согласия удаляет необязательные поля и не отменяет заказ. Законные обязанности по другим основаниям могут сохраняться; оператор сообщает решение и применимые сроки. Обращения не используются для маркетинга.\n\n7. Сотрудники, безопасность и копии\nОснование обработки данных сотрудников: ` + o.StaffBasis + `. Пароли хранятся в виде стойких хешей; доступ ограничен ролями и точками, операции фиксируются без паролей и токенов. Резервные копии ограничены уполномоченными лицами, хранятся не более 14 дней; ранее удалённые данные могут оставаться в закрытой копии до её истечения. Перед восстановлением доступа журнал удаления применяется повторно и просроченные данные очищаются. Бухгалтерские и обязательные кадровые архивы ведутся отдельно от этого сервиса.\n\nВерсия шаблона: ` + privacyTemplate + `. Дата и номер публикации приведены на странице. Это политика обработки, а не сертификат соответствия.`
 	consent := identity + `\n\nОтдельное согласие на необязательные данные\nЯ добровольно разрешаю оператору обработать введённые мной имя и комментарий к приготовлению только для обращения при выдаче и учёта моих предпочтений по этому заказу. Разрешённые действия: сбор, запись, хранение, использование, уточнение, блокирование и удаление в автоматизированной системе, с доступом уполномоченных сотрудников и обработчиков: ` + o.Contractors + `. Места обработки: ` + o.Locations + `.\n\nНе сообщаю сведения о здоровье, платёжные сведения и чужие персональные данные. Необязательные поля удаляются через семь дней после закрытия заказа или раньше при подтверждённом отзыве/обращении, без отмены заказа. Согласие действует до достижения этой цели или отзыва. Отозвать его можно по адресу ` + o.Contact + `, с соразмерной проверкой принадлежности заказа. Закрытые резервные копии истекают не позднее 14 дней; при восстановлении удаления применяются до открытия доступа.\n\nЯ могу оставить поля пустыми, не давать согласие и получить заказ по номеру. Согласие не связано с рекламой и не объединено с принятием иных документов. Отдельная отметка в форме и версия этого текста фиксируются со временем сервера; минимальное доказательство хранится отдельно три года для защиты прав по утверждённой оператором политике.\n\nВерсия шаблона: ` + privacyTemplate + `.`
+	if o.Telegram {
+		policy += `\n\n8. Telegram\nПо отдельному добровольному согласию сервис связывает идентификатор Telegram с конкретным заказом и передаёт через Bot API номер заказа, адрес выдачи и статус (принят, готов, отменён). Имя, username, фото и телефон из Telegram не сохраняются. Получатель сообщений и инфраструктура Telegram должны быть указаны оператором в обработчиках и местах обработки; использование иностранной инфраструктуры требует отдельной правовой оценки. Связь заказа с Telegram и доступ по кнопке действуют до семи дней после завершения или отмены; личная квитанция браузера сохраняет собственный годовой срок. Отказ не мешает заказу. /stop в боте или отключение в заказе прекращают уведомления. Удаление записей сервиса не удаляет сообщения и копии в Telegram. Доставка и звук не гарантируются. Токены временного входа действуют до 30 минут, незавершённые намерения отправки — до часа; обновления бота для защиты от дублей — до 24 часов. Обратитесь к оператору для доступа, отзыва или удаления. Удаления применяются к резервным копиям по общему порядку восстановления.`
+	}
 	return strings.ReplaceAll(policy, `\n`, "\n"), strings.ReplaceAll(consent, `\n`, "\n")
+}
+
+func telegramConsentText(o Operator) string {
+	if !o.Telegram {
+		return ""
+	}
+	return fmt.Sprintf("Отдельное согласие на уведомления о заказе в Telegram\n\nОператор: %s, ИНН %s, ОГРН/ОГРНИП %s, адрес: %s. Контакт для отзыва и обращений: %s.\n\nДобровольно разрешаю связать мой идентификатор Telegram с этим заказом для отправки сообщений: заказ принят, готов к выдаче, отменён. Разрешённые действия: сбор, запись, хранение, использование, передача через Telegram Bot API, блокирование и удаление. В Telegram передаются номер заказа, адрес выдачи и статус; имя и комментарий заказа не передаются. Получатели/обработчики: %s. Места обработки: %s.\n\nСогласие действует до достижения цели, отзыва или семи дней после завершения/отмены. Отключить уведомления можно на странице этого заказа, командой /stop в боте или через контакт оператора. Отказ не мешает заказу и не отменяет его. Это отдельное согласие, не согласие на рекламу или обработку имени/комментария. Минимальное доказательство хранится отдельно три года по утверждённой политике; сообщения и их копии в Telegram не удаляются при очистке сервиса. Закрытые резервные копии истекают не позднее 14 дней, удаления повторяются перед открытием восстановленной системы.\n\nШаблон: %s.", o.LegalName, o.INN, o.Registration, o.Address, o.Contact, o.Contractors, o.Locations, privacyTemplate)
 }
 
 func scanPrivacy(row interface{ Scan(...any) error }) (*PrivacyDocument, error) {
 	d := new(PrivacyDocument)
 	var raw []byte
-	e := row.Scan(&d.ID, &d.Template, &raw, &d.Policy, &d.Consent, &d.PublishedAt)
+	e := row.Scan(&d.ID, &d.Template, &raw, &d.Policy, &d.Consent, &d.PublishedAt, &d.TelegramConsent)
 	if e == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -110,7 +123,7 @@ func scanPrivacy(row interface{ Scan(...any) error }) (*PrivacyDocument, error) 
 	return d, e
 }
 
-const privacyCols = "id,template_version,operator,policy,consent,published_at"
+const privacyCols = "id,template_version,operator,policy,consent,published_at,telegram_consent"
 
 func (s *Store) Privacy(ctx context.Context) (PrivacyState, error) {
 	var state PrivacyState
@@ -127,6 +140,7 @@ func (s *Store) Privacy(ctx context.Context) (PrivacyState, error) {
 		state.Current, e = scanPrivacy(s.DB.QueryRowContext(ctx, "SELECT "+privacyCols+" FROM privacy_versions WHERE id=$1", current.Int64))
 	}
 	state.PreviewPolicy, state.PreviewConsent = privacyTexts(state.Draft)
+	state.PreviewTelegramConsent = telegramConsentText(state.Draft)
 	return state, e
 }
 func (a *API) privacyPublic(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +234,7 @@ func (a *API) privacyPublish(w http.ResponseWriter, r *http.Request) {
 	}
 	policy, consent := privacyTexts(o)
 	var id int64
-	e = tx.QueryRowContext(r.Context(), "INSERT INTO privacy_versions(template_version,operator,policy,consent,actor_id) VALUES($1,$2,$3,$4,$5) RETURNING id", privacyTemplate, raw, policy, consent, actor(r.Context()).ID).Scan(&id)
+	e = tx.QueryRowContext(r.Context(), "INSERT INTO privacy_versions(template_version,operator,policy,consent,actor_id,telegram_consent) VALUES($1,$2,$3,$4,$5,$6) RETURNING id", privacyTemplate, raw, policy, consent, actor(r.Context()).ID, telegramConsentText(o)).Scan(&id)
 	if e == nil {
 		_, e = tx.ExecContext(r.Context(), "UPDATE privacy_settings SET current_version=$1,revision=revision+1 WHERE id=1", id)
 	}

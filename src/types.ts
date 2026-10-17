@@ -99,6 +99,8 @@ export interface OrderItem {
 }
 export type Status = 'new' | 'preparing' | 'ready' | 'completed' | 'cancelled';
 export interface Order {
+  telegram_handle?: string;
+  telegram_delivery?: 'pending' | 'sent' | 'failed';
   id?: number;
   number: number;
   name?: string;

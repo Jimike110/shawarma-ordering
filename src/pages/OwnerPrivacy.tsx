@@ -17,6 +17,7 @@ interface PrivacyState {
   last_maintenance_at: string | null;
   preview_policy: string;
   preview_consent: string;
+  preview_telegram_consent: string;
 }
 interface Retention {
   enabled: boolean;
@@ -39,7 +40,7 @@ interface RequestRecord {
   created_at: string;
 }
 const fields: {
-  key: Exclude<keyof Operator, 'approved' | 'kind'>;
+  key: Exclude<keyof Operator, 'approved' | 'kind' | 'telegram_notifications'>;
   label: string;
   hint?: string;
   long?: boolean;
@@ -373,6 +374,20 @@ export function OwnerPrivacy() {
             <label className="privacy-check">
               <input
                 type="checkbox"
+                checked={!!draft.telegram_notifications}
+                onChange={(e) =>
+                  setDraft({ ...draft, telegram_notifications: e.target.checked, approved: false })
+                }
+              />
+              <span>
+                Включить документы для заказов и уведомлений в Telegram. Сначала укажите Telegram,
+                получателей и фактические места обработки; требуется отдельное утверждение
+                оператором.
+              </span>
+            </label>
+            <label className="privacy-check">
+              <input
+                type="checkbox"
                 checked={!!draft.approved}
                 onChange={(e) => setDraft({ ...draft, approved: e.target.checked })}
               />
@@ -404,6 +419,12 @@ export function OwnerPrivacy() {
               <summary>Отдельное согласие · сохранённый черновик</summary>
               <div className="privacy-document">{state.preview_consent}</div>
             </details>
+            {state.preview_telegram_consent && (
+              <details>
+                <summary>Telegram · отдельное согласие, сохранённый черновик</summary>
+                <div className="privacy-document">{state.preview_telegram_consent}</div>
+              </details>
+            )}
             <button
               className="button"
               disabled={busy || JSON.stringify(draft) !== JSON.stringify(state.draft)}

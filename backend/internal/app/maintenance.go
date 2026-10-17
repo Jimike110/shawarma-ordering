@@ -9,6 +9,9 @@ func (s *Store) Maintenance(ctx context.Context, retentionDays int) error {
 		return e
 	}
 	defer tx.Rollback()
+	if e = telegramSecurityCleanup(ctx, tx); e != nil {
+		return e
+	}
 	if _, e = tx.ExecContext(ctx, "DELETE FROM sessions WHERE expires_at<now()"); e != nil {
 		return e
 	}

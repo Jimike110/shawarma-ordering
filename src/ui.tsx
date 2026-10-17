@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useMenu, useShopPath } from './menu';
 import { PickupSelector } from './PickupSelector';
+import { inTelegramEntry } from './telegram';
 import {
   cartCount,
   invalidLine,
@@ -96,9 +97,11 @@ export function Layout({ neutral = false }: { neutral?: boolean }) {
         {!neutral && (
           <span>{[data?.settings.address, data?.settings.city].filter(Boolean).join(' · ')}</span>
         )}
-        <Link to="/kitchen" className="staff-link">
-          Вход для сотрудников <ArrowUpRight size={14} />
-        </Link>
+        {!inTelegramEntry() && (
+          <Link to="/kitchen" className="staff-link">
+            Вход для сотрудников <ArrowUpRight size={14} />
+          </Link>
+        )}
       </footer>
     </>
   );

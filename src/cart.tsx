@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { telegramClosingConfirmation } from './telegram';
 import type { CartLine, Product } from './types';
 export const MAX_ITEMS = 50;
 export const lineKey = (line: CartLine) =>
@@ -97,6 +98,10 @@ interface CartValue {
 const CartContext = createContext<CartValue | null>(null);
 export function CartProvider({ children, storeId = 1 }: { children: ReactNode; storeId?: number }) {
   const [lines, setLines] = useState<CartLine[]>(() => readCart(storeId));
+  useEffect(() => {
+    telegramClosingConfirmation(lines.length > 0);
+    return () => telegramClosingConfirmation(false);
+  }, [lines.length]);
   const save = (update: (previous: CartLine[]) => CartLine[]) => {
     setLines((previous) => {
       const next = update(previous);

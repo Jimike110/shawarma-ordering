@@ -1,0 +1,30 @@
+# Combine ONLY with compose.e2e.yaml, project shawarma-review, and the ignored test env file.
+# Stop the disposable e2e database before switching: its old credentials are intentionally public.
+services:
+  journal-init:
+    image: alpine:3.22
+    command: ['sh', '-c', 'chown 10001:10001 /journal && chmod 700 /journal']
+    volumes: ['telegram_test_journal:/journal']
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${TELEGRAM_TEST_DB_PASSWORD:?Generate a separate test env file}
+  api:
+    environment:
+      DATABASE_URL: postgres://shawarma:${TELEGRAM_TEST_DB_PASSWORD:?Test password required}@db:5432/shawarma_test?sslmode=disable
+      SESSION_SECRET: ${TELEGRAM_TEST_SESSION_SECRET:?Test signing key required}
+      PUBLIC_ORIGIN: ${TELEGRAM_TEST_ORIGIN:?Test HTTPS origin required}
+      COOKIE_SECURE: 'true'
+      TELEGRAM_ENABLED: 'true'
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Separate test bot required}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:?Separate test bot username required}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:?Test webhook secret required}
+      TELEGRAM_DISPATCH_SECRET: ${TELEGRAM_DISPATCH_SECRET:?Test dispatch secret required}
+      PRIVACY_JOURNAL_PATH: /journal/deletions.jsonl
+    volumes:
+      - telegram_test_journal:/journal
+    depends_on:
+      journal-init: { condition: service_completed_successfully }
+  web:
+    ports: ['127.0.0.1:5183:80']
+volumes:
+  telegram_test_journal:

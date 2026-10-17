@@ -14,6 +14,7 @@ export interface Operator {
   locations: string;
   staff_basis: string;
   approved: boolean;
+  telegram_notifications?: boolean;
 }
 export interface PrivacyDocument {
   id: number;
@@ -21,5 +22,6 @@ export interface PrivacyDocument {
   operator: Operator;
   policy: string;
   consent: string;
+  telegram_consent?: string;
   published_at: string;
 }

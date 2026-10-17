@@ -1,7 +1,28 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'telegram-customer-entry',
+      configureServer(server) {
+        server.middlewares.use((request, _response, next) => {
+          const pathname = request.url?.split('?')[0] ?? '';
+          if (
+            request.method === 'GET' &&
+            /^\/tg(?:\/|$)/.test(pathname) &&
+            !pathname.includes('.')
+          ) {
+            request.url =
+              '/tg/index.html' +
+              (request.url?.includes('?') ? '?' + request.url.split('?').slice(1).join('?') : '');
+          }
+          next();
+        });
+      },
+    },
+  ],
+  build: { rollupOptions: { input: { main: 'index.html', telegram: 'tg/index.html' } } },
   server: {
     strictPort: true,
     allowedHosts: ['host.docker.internal', 'web'],

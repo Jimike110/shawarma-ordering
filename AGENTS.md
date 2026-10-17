@@ -14,6 +14,7 @@ Use [README.md](README.md) as the documentation entry point. Development, operat
 
 - First-time customers choose a pickup point using the map/list picker; `/locations` always reopens it. The header opens the same picker. Keep explicit store/QR links, per-store baskets and frozen checkout attempts. Location permission is gesture-only; never persist guest coordinates. Store pins/landmarks/entrances are manager/owner settings, not worker controls.
 - `/orders` holds browser-local history. Private links use `/track#TOKEN`; order numbers are not lookup credentials.
+- Optional `/tg/*` customer Mini App shares ordering, with separate memory-only Telegram auth and per-order opt-in alerts. Disabled by default; see [Telegram setup](TELEGRAM.md). Preserve accepted retries before Telegram/session/version guards. No synced customer history, profile import or staff access. Telegram mappings expire seven days after closure; include them in journal replay. Live-bot/device and hosted-scheduler checks are separate release gates.
 - Staff enter at `/kitchen`. Owner routes are `/owner`, `/owner/stores`, `/owner/staff`, `/owner/analytics` and secondary `/owner/privacy`.
 - Guest names/comments are optional and require separate consent. Unpublished privacy documents block new intake.
 - Privacy erasure requires explicit activation and maintenance; document publication does not enable it.

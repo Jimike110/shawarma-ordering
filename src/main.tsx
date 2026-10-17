@@ -41,6 +41,7 @@ const router = createBrowserRouter(
     <Route errorElement={<RouteErrorBoundary />}>
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/consent" element={<Privacy consent />} />
+      <Route path="/telegram-consent" element={<Privacy telegram />} />
       <Route element={<PickupStoresProvider />}>
         <Route path="/" element={<StorePicker />} />
         <Route path="/locations" element={<StorePicker alwaysChoose />} />

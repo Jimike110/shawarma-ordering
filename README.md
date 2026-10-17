@@ -18,6 +18,7 @@ The project uses React, TypeScript and Vite, a Go HTTP API, and PostgreSQL. It r
 | Run tests and interpret their results | [Testing guide](docs/TEST_RESULTS.md) |
 | Change the interface | [Design guide](docs/DESIGN.md) |
 | Build/install the private kitchen APK | [Android kitchen guide](android-kitchen/README.md) |
+| Configure the optional Telegram customer app/test bot | [Telegram setup](TELEGRAM.md) |
 | Hand the repository to another developer or agent | [Agent handoff](AGENTS.md) |
 
 **A working local app is not a completed production launch.** The existing Netlify/Neon setup is a demonstration deployment. Russian production infrastructure, operator approval, backups, monitoring and release checks remain separate requirements. See the [launch gates](docs/DEPLOYMENT.md#production-launch-gates).

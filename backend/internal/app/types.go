@@ -64,12 +64,13 @@ type CartItem struct {
 	Options       []string `json:"options,omitempty"`
 }
 type Checkout struct {
-	Name       string         `json:"name"`
-	Note       string         `json:"note"`
-	RequestKey string         `json:"request_key"`
-	Items      []CartItem     `json:"items"`
-	StoreID    int64          `json:"store_id,omitempty"`
-	Privacy    *PrivacyChoice `json:"privacy,omitempty"`
+	Name       string            `json:"name"`
+	Note       string            `json:"note"`
+	RequestKey string            `json:"request_key"`
+	Items      []CartItem        `json:"items"`
+	StoreID    int64             `json:"store_id,omitempty"`
+	Privacy    *PrivacyChoice    `json:"privacy,omitempty"`
+	Telegram   *TelegramCheckout `json:"telegram,omitempty"`
 }
 type OrderItem struct {
 	Portion   string          `json:"portion,omitempty"`
@@ -96,6 +97,8 @@ type Order struct {
 	StoreSlug          string      `json:"store_slug"`
 	Shop               *Settings   `json:"shop,omitempty"`
 	CancelledBy        string      `json:"cancelled_by,omitempty"`
+	TelegramHandle     string      `json:"telegram_handle,omitempty"`
+	TelegramDelivery   string      `json:"telegram_delivery,omitempty"`
 }
 type OrderUpdate struct {
 	Status             string `json:"status"`

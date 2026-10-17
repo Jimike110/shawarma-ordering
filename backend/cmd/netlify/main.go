@@ -83,7 +83,11 @@ func proxy(ctx context.Context, event events.APIGatewayProxyRequest, h http.Hand
 	return events.APIGatewayProxyResponse{StatusCode: rr.Code, Body: rr.Body.String(), MultiValueHeaders: rr.Header()}, nil
 }
 func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	timeout := 12 * time.Second
+	if event.QueryStringParameters["route"] == "internal/telegram-dispatch" || event.Path == "/api/internal/telegram-dispatch" {
+		timeout = 24 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	h, e := load(ctx)
 	if e != nil {

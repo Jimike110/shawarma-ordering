@@ -11,6 +11,13 @@ import { saveOrder } from '../orderHistory';
 import { rub, type Order } from '../types';
 import { usePolling } from '../usePolling';
 import type { PrivacyDocument } from '../privacy';
+import {
+  inTelegramEntry,
+  requestTelegramMessages,
+  telegramClosingConfirmation,
+  telegramHeaders,
+  telegramApp,
+} from '../telegram';
 export function Checkout() {
   const { data: menu, error: menuError, loading, refresh } = useMenu();
   const { lines, clear } = useCart();
@@ -38,6 +45,9 @@ export function Checkout() {
   } = usePolling(loadPrivacy, 30000);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
+  const [telegramVersion, setTelegramVersion] = useState<number | null>(null);
+  const [permissionBusy, setPermissionBusy] = useState(false);
+  const [telegramNotice, setTelegramNotice] = useState('');
   const submitting = useRef(false),
     navigate = useNavigate();
   if (!menu && loading) return <Loading />;
@@ -80,11 +90,42 @@ export function Checkout() {
       );
       return;
     }
+    if (!pending && telegramVersion !== null && telegramVersion !== privacy?.id) {
+      setError('Версия согласия Telegram изменилась. Подтвердите его ещё раз.');
+      return;
+    }
     submitting.current = true;
     setBusy(true);
     setError('');
+    const requestKey = pending?.key ?? randomKey();
+    let telegram: { intent_id?: string } | undefined = inTelegramEntry() ? {} : undefined;
+    let headers: Record<string, string> = {};
+    try {
+      if ((!pending && telegramVersion !== null) || pending?.payload.telegram?.intent_id)
+        headers = await telegramHeaders();
+      if (!pending && telegramVersion !== null)
+        telegram = await api<{ intent_id: string }>('/telegram/checkout-intents', {
+          method: 'POST',
+          credentials: 'omit',
+          headers,
+          body: json({
+            request_key: requestKey,
+            store_id: storeId,
+            consent_version: telegramVersion,
+            accepted: true,
+          }),
+        });
+    } catch (e) {
+      // An accepted frozen retry must work even if Telegram launch authentication expired.
+      if (!pending) {
+        setError(errorMessage(e));
+        submitting.current = false;
+        setBusy(false);
+        return;
+      }
+    }
     const attempt = pending ?? {
-      key: randomKey(),
+      key: requestKey,
       shop: menu.settings,
       store_slug: menu.store?.slug,
       item_names: lines.map(
@@ -106,6 +147,7 @@ export function Checkout() {
             menu.products.find((p) => p.id === line.product_id),
           ),
         })),
+        ...(telegram ? { telegram } : {}),
       },
     };
     persist(attempt, storeId);
@@ -113,6 +155,8 @@ export function Checkout() {
     try {
       const order = await api<Order>('/orders', {
         method: 'POST',
+        headers,
+        ...(inTelegramEntry() ? { credentials: 'omit' as const } : {}),
         body: json({ ...attempt.payload, request_key: attempt.key }),
       });
       if (!order.token) throw new Error('Не удалось получить ссылку заказа. Повторите запрос.');
@@ -120,7 +164,12 @@ export function Checkout() {
       persist(null, storeId);
       setPending(null);
       clear();
-      navigate('/track#' + order.token);
+      telegramClosingConfirmation(false);
+      navigate(
+        order.telegram_handle && inTelegramEntry() && telegramApp()?.initData
+          ? '/order/' + order.telegram_handle
+          : '/track#' + order.token,
+      );
     } catch (e) {
       setError(errorMessage(e));
       // A definitive rejection is safe to edit; a lost response must reuse the exact payload.
@@ -253,6 +302,71 @@ export function Checkout() {
               <Check size={20} />
             </div>
           </section>
+          {inTelegramEntry() && (
+            <section className="panel checkout-section telegram-notifications">
+              <h2>Уведомления о заказе</h2>
+              {privacy?.telegram_consent ? (
+                <>
+                  <label className="privacy-check">
+                    <input
+                      type="checkbox"
+                      checked={
+                        pending
+                          ? !!pending.payload.telegram?.intent_id
+                          : telegramVersion === privacy.id
+                      }
+                      disabled={busy || permissionBusy || !!pending}
+                      onChange={(e) => {
+                        if (!e.target.checked) {
+                          setTelegramVersion(null);
+                          setTelegramNotice('');
+                          return;
+                        }
+                        setPermissionBusy(true);
+                        setTelegramNotice('');
+                        void requestTelegramMessages()
+                          .then((allowed) => {
+                            if (allowed) setTelegramVersion(privacy.id);
+                            else {
+                              setTelegramVersion(null);
+                              setTelegramNotice(
+                                'Telegram не разрешил сообщения. Можно продолжить заказ без уведомлений.',
+                              );
+                            }
+                          })
+                          .catch(() =>
+                            setTelegramNotice(
+                              'Не удалось запросить разрешение. Повторите или продолжите без уведомлений.',
+                            ),
+                          )
+                          .finally(() => setPermissionBusy(false));
+                      }}
+                    />
+                    <span>
+                      Получать уведомления об этом заказе в Telegram. Даю отдельное{' '}
+                      <Link
+                        to={'/telegram-consent?version=' + privacy.id}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        согласие на уведомления
+                      </Link>
+                      .
+                    </span>
+                  </label>
+                  <p className="fine-print">
+                    Заказ принят, готов к выдаче или отменён. Без рекламы. Доставка и звук зависят
+                    от настроек Telegram и устройства. Отключить: /stop в боте или на странице
+                    заказа.
+                  </p>
+                </>
+              ) : (
+                <p>Отдельное согласие Telegram ещё не опубликовано.</p>
+              )}
+              {permissionBusy && <p role="status">Ожидаем разрешение Telegram…</p>}
+              {telegramNotice && <p role="status">{telegramNotice}</p>}
+            </section>
+          )}
           {pending && !busy && (
             <Notice kind="warning">
               Подтверждение ещё не получено. Повторите отправку: состав и сумма сохранятся, второй
@@ -317,7 +431,7 @@ export function Checkout() {
               className="button full"
               type="submit"
               form="checkout-form"
-              disabled={busy || (!pending && (invalid || !accepting))}
+              disabled={busy || permissionBusy || (!pending && (invalid || !accepting))}
             >
               {busy
                 ? 'Принимаем заказ…'

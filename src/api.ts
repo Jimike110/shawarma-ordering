@@ -49,7 +49,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     const request = () =>
       fetch('/api' + path, {
         ...options,
-        credentials: 'same-origin',
+        credentials: options.credentials ?? 'same-origin',
         cache: 'no-store',
         headers,
         signal: controller.signal,

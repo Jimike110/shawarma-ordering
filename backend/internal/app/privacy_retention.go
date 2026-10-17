@@ -20,6 +20,7 @@ type RetentionPreview struct {
 	Requests             int  `json:"requests"`
 	ExpiredSessions      int  `json:"expired_sessions"`
 	DestructionEvidence  int  `json:"destruction_evidence"`
+	TelegramMappings     int  `json:"telegram_mappings"`
 }
 
 func (s *Store) RetentionPreview(ctx context.Context) (RetentionPreview, error) {
@@ -35,6 +36,9 @@ func (s *Store) RetentionPreview(ctx context.Context) (RetentionPreview, error) 
  (SELECT count(*) FROM privacy_requests WHERE expires_at<=now()),
  (SELECT count(*) FROM sessions WHERE expires_at<=now()),
  (SELECT count(*) FROM privacy_destructions WHERE expires_at<=now()) FROM privacy_settings WHERE id=1`).Scan(&p.Enabled, &p.PersonalFields, &p.Receipts, &p.DisabledStaff, &p.HistoricalReferences, &p.SecurityCounters, &p.AuditRecords, &p.Evidence, &p.Requests, &p.ExpiredSessions, &p.DestructionEvidence)
+	if e == nil {
+		e = s.DB.QueryRowContext(ctx, "SELECT count(*) FROM telegram_subscriptions t JOIN orders o ON o.id=t.order_id WHERE o.closed_at<=now()-interval '7 days'").Scan(&p.TelegramMappings)
+	}
 	return p, e
 }
 func (a *API) privacyRetention(w http.ResponseWriter, r *http.Request) {
@@ -113,6 +117,10 @@ func (s *Store) PrivacyMaintenance(ctx context.Context, batch int) (int, error) 
 	}
 	if !enabled {
 		return 0, errors.New("retention disabled: preview and explicitly activate it first")
+	}
+	tgCount, e := s.telegramRetention(ctx, tx, batch)
+	if e != nil {
+		return 0, e
 	}
 	rows, e := tx.QueryContext(ctx, `SELECT id,CASE WHEN closed_at<=now()-interval '1 year' THEN 'expire' ELSE 'erase' END FROM orders
  WHERE status IN ('completed','cancelled') AND (closed_at<=now()-interval '1 year' OR (closed_at<=now()-interval '7 days' AND personal_erased_at IS NULL)) ORDER BY closed_at,id LIMIT $1 FOR UPDATE`, batch)
@@ -202,7 +210,10 @@ func (s *Store) PrivacyMaintenance(ctx context.Context, batch int) (int, error) 
 	if _, e = tx.ExecContext(ctx, "UPDATE privacy_settings SET last_maintenance_at=$1 WHERE id=1", time.Now().UTC()); e != nil {
 		return 0, e
 	}
-	return len(work), tx.Commit()
+	if e = telegramSecurityCleanup(ctx, tx); e != nil {
+		return 0, e
+	}
+	return len(work) + tgCount, tx.Commit()
 }
 
 func (s *Store) archiveReceipt(ctx context.Context, tx *sql.Tx, id int64) error {

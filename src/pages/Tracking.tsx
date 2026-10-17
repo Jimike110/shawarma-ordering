@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Check, CheckCheck, Clock3, CookingPot, Copy, RefreshCw, X } from 'lucide-react';
-import { api, ApiError } from '../api';
+import { api, ApiError, errorMessage } from '../api';
+import { telegramHeaders, resetTelegramSession } from '../telegram';
 import { saveOrder } from '../orderHistory';
 import { usePolling } from '../usePolling';
 import { Loading, Notice } from '../ui';
@@ -10,27 +11,40 @@ import { useMenu } from '../menu';
 import { clock, rub, statusLabels, type Order, type Status } from '../types';
 const steps: Status[] = ['new', 'preparing', 'ready', 'completed'];
 const isComplete = (order: Order) => order.status === 'completed' || order.status === 'cancelled';
-export function Tracking() {
+export function Tracking({ telegramHandle }: { telegramHandle?: string } = {}) {
   const { data: menu } = useMenu();
   const location = useLocation();
-  const token = location.hash.slice(1);
+  const telegram = telegramHandle !== undefined;
+  const token = telegramHandle ?? location.hash.slice(1);
+  const [unsubscribed, setUnsubscribed] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [stopError, setStopError] = useState('');
   const [expiredToken, setExpiredToken] = useState<string | null>(null);
   const load = useCallback(
     async (signal: AbortSignal) => {
       let order: Order;
       try {
-        order = await api<Order>('/orders/' + encodeURIComponent(token), { signal });
+        order = telegram
+          ? await api<Order>('/telegram/orders/' + encodeURIComponent(token), {
+              signal,
+              credentials: 'omit',
+              headers: await telegramHeaders(),
+            })
+          : await api<Order>('/orders/' + encodeURIComponent(token), { signal });
       } catch (e) {
+        if (!signal.aborted && telegram && e instanceof ApiError && e.status === 404)
+          setExpiredToken(token);
         if (!signal.aborted && e instanceof ApiError && e.status === 410) {
-          saveOrder({ token, expired: true });
+          if (!telegram) saveOrder({ token, expired: true });
           setExpiredToken(token);
         }
         throw e;
       }
-      if (!signal.aborted) saveOrder({ token, number: order.number, created_at: order.created_at });
+      if (!signal.aborted && !telegram)
+        saveOrder({ token, number: order.number, created_at: order.created_at });
       return order;
     },
-    [token],
+    [token, telegram],
   );
   const {
     data: order,
@@ -38,16 +52,22 @@ export function Tracking() {
     loading,
     lastUpdated,
     refresh,
-  } = usePolling(load, 5000, token.length === 43 && expiredToken !== token, isComplete);
+  } = usePolling(
+    load,
+    5000,
+    token.length === 43 && expiredToken !== token && !unsubscribed,
+    isComplete,
+  );
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState('');
   if (expiredToken === token)
     return (
       <main className="container empty">
-        <h1>Срок хранения квитанции истёк</h1>
+        <h1>{telegram ? 'Доступ через Telegram завершён' : 'Срок хранения квитанции истёк'}</h1>
         <p>
-          Индивидуальные данные заказа удалены. Ссылка остаётся в истории этого браузера с отметкой
-          об истечении.
+          {telegram
+            ? 'Ссылка недоступна: уведомления отключены, данные удалены или прошло семь дней после закрытия заказа. Личная квитанция браузера сохраняется по своему сроку.'
+            : 'Индивидуальные данные заказа удалены. Ссылка остаётся в истории этого браузера с отметкой об истечении.'}
         </p>
         <Link className="button" to="/orders">
           Мои заказы
@@ -186,12 +206,55 @@ export function Tracking() {
             <RefreshCw size={17} />
           </button>
         </div>
-        <button className="button secondary full" onClick={copy}>
-          <Copy size={17} />
-          {copied ? 'Ссылка скопирована' : 'Сохранить личную ссылку'}
-        </button>
-        {copyError && <Notice kind="warning">{copyError}</Notice>}
-        <p className="fine-print">Тот, у кого есть эта ссылка, сможет видеть статус заказа.</p>
+        {telegram ? (
+          <div className="telegram-order-actions">
+            <p className="fine-print">
+              {unsubscribed
+                ? 'Уведомления отключены. Доступ через Telegram закрыт; личная квитанция в истории браузера сохраняется по своему сроку.'
+                : order.telegram_delivery === 'failed'
+                  ? 'Сообщение не доставлено. Следите за готовностью на этой странице.'
+                  : order.telegram_delivery === 'pending'
+                    ? 'Сообщение ожидает отправки. Статус на этой странице обновляется независимо.'
+                    : 'Уведомления включены. Доставка и звук зависят от Telegram и устройства.'}
+            </p>
+            {!unsubscribed && (
+              <button
+                className="button secondary full"
+                disabled={stopping}
+                onClick={() => {
+                  setStopping(true);
+                  setStopError('');
+                  void telegramHeaders()
+                    .then((headers) =>
+                      api('/telegram/orders/' + encodeURIComponent(token), {
+                        method: 'DELETE',
+                        credentials: 'omit',
+                        headers,
+                      }),
+                    )
+                    .then(() => {
+                      setUnsubscribed(true);
+                      resetTelegramSession();
+                    })
+                    .catch((e) => setStopError(errorMessage(e)))
+                    .finally(() => setStopping(false));
+                }}
+              >
+                {stopping ? 'Отключаем…' : 'Отключить уведомления об этом заказе'}
+              </button>
+            )}
+            {stopError && <Notice>{stopError}</Notice>}
+          </div>
+        ) : (
+          <>
+            <button className="button secondary full" onClick={copy}>
+              <Copy size={17} />
+              {copied ? 'Ссылка скопирована' : 'Сохранить личную ссылку'}
+            </button>
+            {copyError && <Notice kind="warning">{copyError}</Notice>}
+            <p className="fine-print">Тот, у кого есть эта ссылка, сможет видеть статус заказа.</p>
+          </>
+        )}
       </div>
       <div className="tracking-details panel">
         <h2>Что забираете</h2>

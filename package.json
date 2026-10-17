@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "build:netlify": "node scripts/build-netlify.mjs",
-    "check": "npm run test && npm run build"
+    "check": "npm run test && node --test scripts/telegram-functions.test.mjs && npm run build"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

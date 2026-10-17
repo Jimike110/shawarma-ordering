@@ -116,6 +116,9 @@ func recordDestruction(ctx context.Context, tx *sql.Tx, e deletionEntry) error {
 	if e.Target == "staff" {
 		categories = "Логин, отображаемое имя, телефон, email, хеш пароля отключённого сотрудника"
 	}
+	if e.Target == "telegram_order" {
+		categories = "Связь заказа с Telegram, идентификатор получателя, доступ и очередь уведомлений"
+	}
 	if e.Operation == "block" {
 		categories = "Блокирование необязательных полей; не подтверждение уничтожения"
 	}
@@ -127,6 +130,9 @@ func erasePersonal(ctx context.Context, tx *sql.Tx, id int64) error {
 	_, e := tx.ExecContext(ctx, "UPDATE orders SET customer_name='',note='',cancellation_reason='',personal_erased_at=COALESCE(personal_erased_at,now()),personal_blocked=false WHERE id=$1", id)
 	if e == nil {
 		_, e = tx.ExecContext(ctx, "UPDATE audit_events SET details='{}' WHERE action='order.update' AND resource=$1", fmt.Sprint(id))
+	}
+	if e == nil {
+		e = eraseTelegram(ctx, tx, id)
 	}
 	return e
 }
@@ -204,6 +210,8 @@ func (s *Store) ReplayPrivacyJournal(ctx context.Context) (int, error) {
 			e = erasePersonal(ctx, tx, entry.TargetID)
 		case entry.Target == "staff" && entry.Operation == "erase":
 			e = eraseAccount(ctx, tx, entry.TargetID)
+		case entry.Target == "telegram_order" && entry.Operation == "erase":
+			e = eraseTelegram(ctx, tx, entry.TargetID)
 		default:
 			return 0, errors.New("unsupported deletion journal operation")
 		}

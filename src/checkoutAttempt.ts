@@ -11,6 +11,7 @@ export interface Attempt {
     name: string;
     note: string;
     privacy?: PrivacyChoice;
+    telegram?: { intent_id?: string };
     items: { product_id: number; quantity: number; expected_price: number; options?: string[] }[];
   };
 }

@@ -24,10 +24,12 @@ type Config struct {
 	Secret     string
 	Secure     bool
 	TrustProxy bool
+	Telegram   TelegramConfig
 }
 
 func LoadConfig() (Config, error) {
 	c := Config{Origin: os.Getenv("PUBLIC_ORIGIN"), Secret: os.Getenv("SESSION_SECRET"), Secure: os.Getenv("COOKIE_SECURE") == "true", TrustProxy: os.Getenv("TRUST_PROXY") == "true"}
+	c.Telegram = loadTelegramConfig()
 	u, e := url.Parse(c.Origin)
 	if e != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
 		return c, errors.New("PUBLIC_ORIGIN must be an origin without path, for example http://localhost:5173")
@@ -53,7 +55,16 @@ func New(store *Store, c Config) *API {
 		store.PrivacyKey = c.Secret
 	}
 	a := &API{Store: store, Config: c}
+	store.Telegram = c.Telegram
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/telegram/config", a.telegramConfig)
+	mux.HandleFunc("POST /api/telegram/session", a.telegramSession)
+	mux.HandleFunc("POST /api/telegram/checkout-intents", a.telegramIntent)
+	mux.HandleFunc("GET /api/telegram/orders/{handle}", a.telegramOrder)
+	mux.HandleFunc("DELETE /api/telegram/orders/{handle}", a.telegramOrder)
+	mux.HandleFunc("POST /api/telegram/webhook", a.telegramWebhook)
+	mux.HandleFunc("POST /api/internal/telegram-dispatch", a.telegramDispatch)
+	mux.HandleFunc("GET /api/owner/telegram/health", a.ownerOnly(a.telegramHealth, false))
 	mux.HandleFunc("GET /api/health", a.health)
 	mux.HandleFunc("GET /api/privacy", a.privacyPublic)
 	mux.HandleFunc("GET /api/privacy/versions/{id}", a.privacyPublic)
@@ -148,7 +159,11 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	requestTimeout := 10 * time.Second
+	if r.URL.Path == "/api/internal/telegram-dispatch" {
+		requestTimeout = 20 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
 	defer cancel()
 	a.handler.ServeHTTP(w, r.WithContext(ctx))
 }
@@ -279,10 +294,14 @@ func (a *API) createOrder(w http.ResponseWriter, r *http.Request) {
 	if !a.limit(w, r, "order", 30) {
 		return
 	}
-	o, e := a.Store.CreateOrder(r.Context(), c, a.orderToken(c.RequestKey))
+	o, e := a.Store.CreateOrder(telegramContext(r.Context(), r), c, a.orderToken(c.RequestKey))
 	if e != nil {
 		fail(w, e)
 		return
+	}
+	if c.Telegram != nil && c.Telegram.IntentID != "" {
+		_, _ = a.DispatchTelegram(r.Context(), 1)
+		_ = a.Store.DB.QueryRowContext(r.Context(), "SELECT handle FROM telegram_subscriptions WHERE order_id=$1", o.ID).Scan(&o.TelegramHandle)
 	}
 	reply(w, 201, o)
 }
@@ -332,6 +351,9 @@ func (a *API) updateOrder(w http.ResponseWriter, r *http.Request) {
 	if e != nil {
 		fail(w, e)
 		return
+	}
+	if u.Status == "ready" || u.Status == "cancelled" {
+		_, _ = a.DispatchTelegram(r.Context(), 1)
 	}
 	reply(w, 200, o)
 }

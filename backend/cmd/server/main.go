@@ -35,10 +35,32 @@ func main() {
 	if addr == "" {
 		addr = ":8080"
 	}
-	server := &http.Server{Addr: addr, Handler: app.New(store, config), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	api := app.New(store, config)
+	server := &http.Server{Addr: addr, Handler: api, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	stop := make(chan os.Signal, 1)
 	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
 	defer stopMaintenance()
+	telegramDone := make(chan struct{})
+	go func() {
+		defer close(telegramDone)
+		if !config.Telegram.Enabled {
+			return
+		}
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			job, finish := context.WithTimeout(maintenanceContext, 20*time.Second)
+			if _, err := api.DispatchTelegram(job, 10); err != nil && maintenanceContext.Err() == nil {
+				log.Printf("Telegram dispatch unavailable (%T)", err)
+			}
+			finish()
+			select {
+			case <-maintenanceContext.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 	maintenanceDone := make(chan struct{})
 	go func() {
 		defer close(maintenanceDone)
@@ -71,4 +93,5 @@ func main() {
 	}
 	stopMaintenance()
 	<-maintenanceDone
+	<-telegramDone
 }

@@ -182,7 +182,14 @@ func (a *API) privacyRequestAction(w http.ResponseWriter, r *http.Request) {
 							rows.Close()
 						}
 					}
-					exported = map[string]any{"order": o, "name": name, "note": note, "blocked": blocked, "erased_at": erased, "consent_state": state, "notice_version": notice, "closed_at": closed, "cancellation_reason": reason, "consent_evidence": proof, "request_id": id}
+					var recipient *int64
+					if e == nil {
+						err := tx.QueryRowContext(ctx, "SELECT recipient FROM telegram_subscriptions WHERE order_id=$1", orderID.Int64).Scan(&recipient)
+						if err != nil && err != sql.ErrNoRows {
+							e = err
+						}
+					}
+					exported = map[string]any{"order": o, "name": name, "note": note, "blocked": blocked, "erased_at": erased, "consent_state": state, "notice_version": notice, "closed_at": closed, "cancellation_reason": reason, "consent_evidence": proof, "request_id": id, "telegram_recipient": recipient}
 				}
 			case "block", "erase", "correct":
 				if in.Action == "correct" {
