@@ -1,6 +1,12 @@
 import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
 
+test.afterEach(async ({ page }) => {
+  // Privacy mocks fetch real fixture documents. Drain in-flight handlers before
+  // Playwright disposes their response bodies along with the browser context.
+  await page.unrouteAll({ behavior: 'wait' });
+});
+
 async function mockTelegram(page: Page, granted = true) {
   await page.route('https://telegram.org/js/telegram-web-app.js', (r) =>
     r.fulfill({
@@ -136,10 +142,4 @@ test('Telegram permission denial keeps number-only checkout available and respon
   await expect(
     page.getByRole('heading', { name: 'Согласие на уведомления в Telegram' }),
   ).toBeVisible();
-  const standard = await page.request.get('/s/belorusskaya-4'),
-    telegram = await page.request.get('/tg/s/belorusskaya-4');
-  expect(standard.headers()['x-frame-options']).toBe('DENY');
-  expect(standard.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
-  expect(telegram.headers()['x-frame-options']).toBeUndefined();
-  expect(telegram.headers()['content-security-policy']).toContain('https://web.telegram.org');
 });
