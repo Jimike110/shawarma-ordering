@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronDown, MapPin } from 'lucide-react';
@@ -14,6 +14,13 @@ export function PickupSelector() {
   const [params, setParams] = useSearchParams();
   const open = params.get('pickup') === '1',
     openedHere = useRef(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(open);
+  useLayoutEffect(() => {
+    // Restore after the dialog has closed and the trigger is no longer inert.
+    if (wasOpen.current && !open) trigger.current?.focus({ preventScroll: true });
+    wasOpen.current = open;
+  }, [open]);
   const current = menu?.store;
   useEffect(() => {
     if (current?.published && !current.archived) rememberPickup(current.slug);
@@ -43,6 +50,7 @@ export function PickupSelector() {
   return (
     <>
       <button
+        ref={trigger}
         type="button"
         className="pickup-selector pickup-selector-button"
         aria-label="Адрес самовывоза"
@@ -83,15 +91,15 @@ export function PickupSelector() {
 }
 function PickupDialog({ children, close }: { children: ReactNode; close: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const trigger = document.activeElement as HTMLElement | null;
+  useLayoutEffect(() => {
+    const dialog = ref.current!;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    ref.current?.showModal();
+    dialog.showModal();
     return () => {
-      ref.current?.close();
+      // Close the captured element before React detaches its ref/DOM node.
+      dialog.close();
       document.body.style.overflow = previous;
-      trigger?.focus();
     };
   }, []);
   return (

@@ -133,12 +133,21 @@ test('header picker supports Back, Escape, reload, keyboard and map failure', as
   await expect(dialog).toBeVisible();
   await page.goBack();
   await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
   await trigger.focus();
   await page.keyboard.press('Enter');
   await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.keyboard.press('Enter');
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
+  }
   await trigger.click();
   await page.reload();
   await expect(dialog).toBeVisible();
@@ -155,6 +164,7 @@ test('header picker supports Back, Escape, reload, keyboard and map failure', as
   await expect(dialog.locator('.pickup-map')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Закрыть выбор точки' }).click();
   await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
 });
 
 test('unavailable saved locations are explained and refresh does not interrupt selection', async ({
