@@ -30,7 +30,7 @@ npm ci
 npm run check
 ```
 
-`check` runs Vitest, Telegram entry/function-packaging checks, TypeScript checking and a Vite production build. It does not run Go or Playwright.
+`check` runs structure/import-boundary checks, Vitest, Telegram entry/function-packaging checks, TypeScript checking and a Vite production build. It does not run Go or Playwright.
 
 CI separately runs `node --test scripts/customer-headers.test.mjs` with `HEADER_TEST_ORIGIN` pointing at the built nginx site. This verifies that ordinary customer/staff pages deny framing and only `/tg/*` allows Telegram. Run this check against nginx, not Vite: development-server responses do not carry production hosting headers. Netlify function-header checks are included in the packaging tests; actual hosted headers still need release verification.
 

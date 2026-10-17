@@ -18,10 +18,10 @@ test('Vite serves the Telegram entry on direct customer routes without changing 
     assert.ok(address && typeof address !== 'string');
     const origin = 'http://127.0.0.1:' + address.port;
     const telegram = await (await fetch(origin + '/tg/s/example/checkout')).text();
-    assert.match(telegram, /\/src\/telegramApp\.tsx/);
+    assert.match(telegram, /\/src\/app\/telegram\.tsx/);
     assert.match(telegram, /telegram-storage\.js/);
     const ordinary = await (await fetch(origin + '/')).text();
-    assert.match(ordinary, /\/src\/main\.tsx/);
+    assert.match(ordinary, /\/src\/app\/main\.tsx/);
     assert.doesNotMatch(ordinary, /telegram-web-app\.js/);
   } finally {
     await server.close();

@@ -169,7 +169,7 @@ docker compose -p shawarma-restore-check -f compose.e2e.yaml exec -T db psql -U 
 
 Replace `CHOSEN_ARCHIVE.dump` with the reviewed file. Inspect settings, receipts and migration history too. A successful count is only a basic restoration check.
 
-A database restored from personal-data backups must remain inaccessible until the [privacy restore gate](../PRIVACY_OPERATIONS.md#restore-without-resurrecting-erased-data) has replayed the independent journal and drained overdue cleanup. This rehearsal does not authorize serving restored customer data.
+A database restored from personal-data backups must remain inaccessible until the [privacy restore gate](PRIVACY_OPERATIONS.md#restore-without-resurrecting-erased-data) has replayed the independent journal and drained overdue cleanup. This rehearsal does not authorize serving restored customer data.
 
 After the isolated check:
 

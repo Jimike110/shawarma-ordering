@@ -10,11 +10,13 @@ One deployment/database serves one business with multiple stores. Customers are 
 
 Use [README.md](README.md) as the documentation entry point. Development, operations, API, design, testing, deployment and privacy each have their own guide.
 
+Read [architecture and placement rules](docs/ARCHITECTURE.md) before adding or moving modules.
+
 ## Current scope and decisions
 
 - First-time customers choose a pickup point using the map/list picker; `/locations` always reopens it. The header opens the same picker. Keep explicit store/QR links, per-store baskets and frozen checkout attempts. Location permission is gesture-only; never persist guest coordinates. Store pins/landmarks/entrances are manager/owner settings, not worker controls.
 - `/orders` holds browser-local history. Private links use `/track#TOKEN`; order numbers are not lookup credentials.
-- Optional `/tg/*` customer Mini App shares ordering, with separate memory-only Telegram auth and per-order opt-in alerts. Disabled by default; see [Telegram setup](TELEGRAM.md). Preserve accepted retries before Telegram/session/version guards. No synced customer history, profile import or staff access. Telegram mappings expire seven days after closure; include them in journal replay. Live-bot/device and hosted-scheduler checks are separate release gates.
+- Optional `/tg/*` customer Mini App shares ordering, with separate memory-only Telegram auth and per-order opt-in alerts. Disabled by default; see [Telegram setup](docs/TELEGRAM.md). Preserve accepted retries before Telegram/session/version guards. No synced customer history, profile import or staff access. Telegram mappings expire seven days after closure; include them in journal replay. Live-bot/device and hosted-scheduler checks are separate release gates.
 - Staff enter at `/kitchen`. Owner routes are `/owner`, `/owner/stores`, `/owner/staff`, `/owner/analytics` and secondary `/owner/privacy`.
 - Guest names/comments are optional and require separate consent. Unpublished privacy documents block new intake.
 - Privacy erasure requires explicit activation and maintenance; document publication does not enable it.
@@ -43,21 +45,31 @@ Do not print `.env`, passwords, cookies, tokens or connection URLs. Do not commi
 
 | Code | Responsibility |
 | --- | --- |
-| `src/main.tsx` | Routes, error boundaries and provider composition |
-| `src/cart.tsx`, `src/checkoutAttempt.ts` | Store baskets and exact-payload retry state |
-| `src/orderHistory.ts`, `src/useSavedOrders.ts` | Private-link history and legacy metadata recovery |
-| `src/staff.tsx`, `src/ownerWorkspace.tsx` | Staff sessions/workspaces and owner layout |
-| `src/auth.ts`, `src/staffStore.ts`, `src/ownerContext.ts` | Dependency-only context identities/hooks |
-| `src/useKitchenSound.ts`, `src/usePolling.ts` | Kitchen audio and nonoverlapping polling |
-| `backend/internal/app/api.go` | Route registration, HTTP validation and error responses |
-| `accounts.go`, `stores.go`, `store.go` in that directory | Accounts, authorization, store lifecycle, reports and checkout |
+| `src/app/` | Website/Telegram entry points, route/provider composition, customer/staff layouts and recovery |
+| `src/features/cart/cart.tsx`, `src/features/checkout/checkoutAttempt.ts` | Store baskets and exact-payload retry state |
+| `src/features/orders/orderHistory.ts`, `src/features/orders/useSavedOrders.ts` | Private-link history and legacy metadata recovery |
+| `src/features/auth/`, `src/features/owner/` | Staff authentication and owner workspace |
+| `src/features/auth/authContext.ts`, `src/features/auth/storeContext.ts`, `src/features/owner/ownerContext.ts` | Dependency-only context identities/hooks |
+| `src/features/kitchen/useKitchenSound.ts`, `src/shared/hooks/usePolling.ts` | Kitchen audio and nonoverlapping polling |
+| `backend/internal/app/api.go`, `http.go` | Route registration/middleware and HTTP validation/error responses |
+| `accounts*`, `auth*`, `catalog*`, `orders*`, `reports*`, `stores*` in that directory | Focused account, menu, checkout, reporting and store operations; `*_http.go` handles HTTP, `*_store.go` handles transactional storage |
 | `privacy*.go` in that directory | Documents, requests, retention, journal and evidence |
-| `schema.sql`, `migrations/*.sql` in that directory | Embedded transactional migrations |
+| `backend/internal/database/` | PostgreSQL connection lifecycle and embedded `schema.sql`/`migrations/*.sql` |
 | `backend/cmd/` | Server, migration, account, maintenance and function entry points |
 | `kitchen_devices.go`, `toppings.go` | Shared device authorization/health and store toppings |
 | `android-kitchen/` | Restricted WebView, Keystore, foreground monitor and native audio |
 
 Keep auth context imports acyclic: screen/provider component files must not define the context identity imported by their descendants. That formerly caused “Missing staff authentication” during Vite refresh. Error recovery must not clear saved orders or resubmit checkout.
+
+## Structure rules
+
+- Group frontend work under `src/features/<domain>/`; keep related UI, logic, tests and scoped styles together. Do not recreate a global `pages/`, `ui.tsx`, `utils` dump or a large export barrel.
+- Use `src/app/` to compose features. Features must not import `app/`; `src/shared/` must not import features or application code. Peer-feature dependencies must remain acyclic.
+- Use `@/` imports across boundaries; keep React component filenames PascalCase and hooks/helpers camelCase. Context identities stay in dependency-only modules.
+- Put pure calculations in plain `.ts` modules; storage/network/hooks belong to their feature, not a misleading generic helper. Shared API contracts and formatting stay dependency-light.
+- Keep Go commands thin. Database infrastructure belongs in `internal/database`; application files use domain prefixes and separate HTTP adapters from storage where practical. Keep cross-domain checkout/privacy transactions together rather than introducing package cycles or partial commits.
+- Keep root build/Compose/provider entry files discoverable. Durable guides belong in `docs/`; generated output and review material stay ignored.
+- After moving files, update entry points, aliases, mocks, HMR probes, Docker/CI inputs and documentation links. Run `npm run check:structure` (included in `npm run check`), affected backend tests and isolated browser regressions.
 
 ## Invariants
 
@@ -72,7 +84,7 @@ Keep auth context imports acyclic: screen/provider component files must not defi
 - Keep `SESSION_SECRET` stable: tracking/retry derivation, privacy journal integrity and keyed digests depend on it.
 - Never fabricate historical preparation events from `updated_at`.
 - Active orders must not be removed by routine retention. Keep legacy `ORDER_RETENTION_DAYS=0`; nonzero deletion is retired.
-- Restore with traffic blocked, the independent current deletion journal and its original key. Replay and drain retention before reopening; see [privacy recovery](PRIVACY_OPERATIONS.md#restore-without-resurrecting-erased-data).
+- Restore with traffic blocked, the independent current deletion journal and its original key. Replay and drain retention before reopening; see [privacy recovery](docs/PRIVACY_OPERATIONS.md#restore-without-resurrecting-erased-data).
 - Add migrations; do not rewrite migrations already applied to a database.
 
 ## Work and verification

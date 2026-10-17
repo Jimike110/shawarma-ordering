@@ -11,7 +11,18 @@ test-results/
 *.log
 backups/
 artifacts/
-docs/
+# Only durable project guides belong in Git; local pitch/operator material stays private.
+docs/*
+!docs/API.md
+!docs/ARCHITECTURE.md
+!docs/DEPLOYMENT.md
+!docs/DESIGN.md
+!docs/DEVELOPMENT.md
+!docs/MENU_SOURCE.md
+!docs/OPERATIONS.md
+!docs/PRIVACY_OPERATIONS.md
+!docs/TELEGRAM.md
+!docs/TEST_RESULTS.md
 
 # Local pitch-video tooling (media outputs are already covered by artifacts/)
 scripts/pitch/

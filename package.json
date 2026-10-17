@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "build:netlify": "node scripts/build-netlify.mjs",
-    "check": "npm run test && node --test scripts/telegram-functions.test.mjs && npm run build"
+    "check:structure": "node scripts/check-structure.mjs && node --test scripts/check-structure.test.mjs",
+    "check": "npm run check:structure && npm run test && node --test scripts/telegram-functions.test.mjs && npm run build"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

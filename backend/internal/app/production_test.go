@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"golang.org/x/crypto/bcrypt"
+	"io/fs"
+	"shawarma/internal/database"
 	"strings"
 	"testing"
 	"time"
@@ -210,7 +212,7 @@ func TestMigrationsPreserveEditsAndAreVersioned(t *testing.T) {
 	}
 	var count int
 	store.DB.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&count)
-	files, err := migrations.ReadDir("migrations")
+	files, err := fs.ReadDir(database.Sources(), "migrations")
 	if err != nil {
 		t.Fatal(err)
 	}

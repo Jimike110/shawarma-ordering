@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 const target = new URL(process.env.PREVIEW_URL ?? 'http://host.docker.internal:5173');
 if (!['localhost', '127.0.0.1', 'host.docker.internal', 'web'].includes(target.hostname))
   throw new Error('Development verification only supports local hosts.');
-const cssURL = new URL('../src/styles.css', import.meta.url);
+const cssURL = new URL('../src/app/styles/global.css', import.meta.url);
 const marker = 'check-' + randomUUID();
 const probe = `\n/* ${marker} */\n:root { --codex-hmr-check: ${marker}; }\n/* end ${marker} */\n`;
 const browser = await chromium.launch({

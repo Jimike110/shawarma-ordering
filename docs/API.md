@@ -204,7 +204,7 @@ Create a case with `store_id`, exactly one of `order_id`/`order_number`, and `ki
 
 Actions are `verify`, `export`, `block`, `correct`, `erase`, `resolve`. Verification accepts `personal_link_and_purchase`, `in_person` or `existing_contact`. Other actions require a verified case. Correction supplies `name`/`note` and cannot restore an erased/expired purpose. Request listing uses `before` with up to 200 entries. Destruction listing uses `after` event IDs and returns its next cursor.
 
-These endpoints do not verify identity automatically, send correspondence, install a scheduler or sign statutory acts. See [privacy operations](../PRIVACY_OPERATIONS.md).
+These endpoints do not verify identity automatically, send correspondence, install a scheduler or sign statutory acts. See [privacy operations](PRIVACY_OPERATIONS.md).
 
 ## Shared kitchen devices and toppings
 

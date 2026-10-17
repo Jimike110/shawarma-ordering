@@ -10,15 +10,16 @@ The project uses React, TypeScript and Vite, a Go HTTP API, and PostgreSQL. It r
 | --- | --- |
 | Run the app for the first time | [Quick start](#quick-start) below |
 | Develop, configure or understand the code | [Development guide](docs/DEVELOPMENT.md) |
+| Find code or decide where a change belongs | [Architecture and structure](docs/ARCHITECTURE.md) |
 | Use the kitchen or owner dashboard | [Operations guide](docs/OPERATIONS.md) |
 | Call an API or understand permissions | [API reference](docs/API.md) |
 | Import the shop menu or transfer current settings | [Menu guide](docs/MENU_SOURCE.md) |
 | Upgrade or deploy a release | [Deployment guide](docs/DEPLOYMENT.md) |
-| Set up privacy documents, cleanup or recovery | [Privacy operations](PRIVACY_OPERATIONS.md) |
+| Set up privacy documents, cleanup or recovery | [Privacy operations](docs/PRIVACY_OPERATIONS.md) |
 | Run tests and interpret their results | [Testing guide](docs/TEST_RESULTS.md) |
 | Change the interface | [Design guide](docs/DESIGN.md) |
 | Build/install the private kitchen APK | [Android kitchen guide](android-kitchen/README.md) |
-| Configure the optional Telegram customer app/test bot | [Telegram setup](TELEGRAM.md) |
+| Configure the optional Telegram customer app/test bot | [Telegram setup](docs/TELEGRAM.md) |
 | Hand the repository to another developer or agent | [Agent handoff](AGENTS.md) |
 
 **A working local app is not a completed production launch.** The existing Netlify/Neon setup is a demonstration deployment. Russian production infrastructure, operator approval, backups, monitoring and release checks remain separate requirements. See the [launch gates](docs/DEPLOYMENT.md#production-launch-gates).
@@ -73,7 +74,7 @@ Sign in at `/kitchen`; an owner is directed to the owner workspace. Passwords ar
 ### 4. Configure the business
 
 1. Open **Точки** (Stores), choose the original store and review its name, address, menu, prices and opening hours.
-2. Open **Персональные данные** (Personal data) from the account menu or sidebar. Follow [privacy setup](PRIVACY_OPERATIONS.md#configure-and-publish-documents). Publishing requires the actual operator's approved details and recent owner password confirmation.
+2. Open **Персональные данные** (Personal data) from the account menu or sidebar. Follow [privacy setup](docs/PRIVACY_OPERATIONS.md#configure-and-publish-documents). Publishing requires the actual operator's approved details and recent owner password confirmation.
 3. Create individual staff accounts and assign each a role at the relevant stores.
 4. For the supplied Я@Ша catalogue, follow the [explicit import procedure](docs/MENU_SOURCE.md#import-the-bundled-catalogue). Do not assume that copying images also populates the database.
 

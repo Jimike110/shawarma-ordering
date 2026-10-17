@@ -90,7 +90,7 @@ No map API key is required for the initial Leaflet/OpenStreetMap integration. Ow
 
 Migration `007_pickup_locations.sql` adds nullable pins and location descriptions. It seeds only the supplied Белорусская ул., 4 pin when the existing organization link and address match; other stores remain unset. Existing receipt snapshots are unchanged. Apply migrations before releasing the matching API/frontend; local Go requires rebuilding as usual.
 
-`src/PickupMap.tsx` isolates the tile provider. The current public tile service is best-effort, with no SLA. Retain attribution, normal browser caching, and the tile image's origin-only Referrer-Policy; no bulk downloads/offline prefetch. Automated browser tests intercept tile requests. Review the [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/) and choose an appropriate provider before sustained production traffic. Public maps send connection/view information to the provider: include it in the operator's processing/location review and approved privacy documents. Choosing a free map does not settle Russian production data-location requirements. No publication is automatic.
+`src/features/locations/PickupMap.tsx` isolates the tile provider. The current public tile service is best-effort, with no SLA. Retain attribution, normal browser caching, and the tile image's origin-only Referrer-Policy; no bulk downloads/offline prefetch. Automated browser tests intercept tile requests. Review the [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/) and choose an appropriate provider before sustained production traffic. Public maps send connection/view information to the provider: include it in the operator's processing/location review and approved privacy documents. Choosing a free map does not settle Russian production data-location requirements. No publication is automatic.
 
 ### Backend environment
 
@@ -123,14 +123,16 @@ Legacy `KITCHEN_PASSWORD`, `KITCHEN_PASSWORD_HASH` and `STAFF_USERS` do not auth
 
 | Path | What belongs here |
 | --- | --- |
-| `src/pages/` | Customer, kitchen, owner and privacy screens |
-| `src/staff.tsx`, `src/ownerWorkspace.tsx` | Staff auth/workspace composition and owner navigation |
-| `src/auth.ts`, `src/staffStore.ts`, `src/ownerContext.ts` | Shared context identities/hooks; keep imports acyclic |
-| `src/cart.tsx`, `src/checkoutAttempt.ts` | Store-specific baskets and immutable pending submissions |
-| `src/orderHistory.ts`, `src/useSavedOrders.ts` | Browser private-link history |
-| `src/usePolling.ts` | Request serialization, cancellation and refresh |
-| `src/ErrorBoundary.tsx` | Independent route/root recovery screens |
+| `src/app/` | Website/Telegram entry points, route composition, customer/staff layouts and recovery |
+| `src/features/` | Domain-owned UI, logic, tests and styles: ordering, locations, kitchen, access, owner, reports, privacy and Telegram |
+| `src/shared/` | Dependency-light HTTP client/contracts, formatting, polling and reusable UI |
+| `src/features/auth/authContext.ts`, `src/features/auth/storeContext.ts`, `src/features/owner/ownerContext.ts` | Shared context identities/hooks; keep imports acyclic |
+| `src/features/cart/cart.tsx`, `src/features/checkout/checkoutAttempt.ts` | Store-specific baskets and immutable pending submissions |
+| `src/features/orders/orderHistory.ts`, `src/features/orders/useSavedOrders.ts` | Browser private-link history |
+| `src/shared/hooks/usePolling.ts` | Request serialization, cancellation and refresh |
+| `src/app/ErrorBoundary.tsx` | Independent route/root recovery screens |
 | `backend/internal/app/` | API, validation, transactional storage, auth, reports and privacy |
+| `backend/internal/database/` | Connection pool and embedded SQL migration runner/sources |
 | `backend/cmd/` | Executable entry points |
 | `config/` | Reviewed initial shop/menu snapshots, not live database configuration |
 | `public/` | Locally served images, font and kitchen audio |
@@ -138,6 +140,8 @@ Legacy `KITCHEN_PASSWORD`, `KITCHEN_PASSWORD_HASH` and `STAFF_USERS` do not auth
 | `tests/e2e/` | Playwright workflows on disposable data |
 | `artifacts/` | Ignored screenshots, reports and local working outputs |
 | `backups/` | Ignored restricted database dumps |
+
+See [architecture](ARCHITECTURE.md) for dependency rules, file naming and feature ownership. `npm run check:structure` checks the frontend layout, import resolution/case, dependency direction and runtime import cycles; `npm run check` includes it.
 
 ### Request and data flow
 
@@ -147,7 +151,7 @@ Core tables represent stores, store settings, products, orders, staff accounts/m
 
 Checkout locks the relevant store before validating intake/products. Retry keys distinguish an accepted attempt from a new order. Current prices, menu edits or privacy publication must not turn an accepted retry into a second order.
 
-Migrations are embedded in Go: `schema.sql` followed by numbered files in `backend/internal/app/migrations/`, including `005_kitchen_devices.sql` and `006_toppings.sql`. They apply transactionally under a lock and are recorded in `schema_migrations`. Add migrations rather than editing already-applied files. The trial migrations preserve current accounts/products/order IDs; shared access is configured explicitly after upgrading. See the [Android build/install guide](../android-kitchen/README.md).
+Migrations are embedded in Go: `schema.sql` followed by numbered files in `backend/internal/database/migrations/`, including `005_kitchen_devices.sql` and `006_toppings.sql`. They apply transactionally under a lock and are recorded in `schema_migrations`. Add migrations rather than editing already-applied files. The trial migrations preserve current accounts/products/order IDs; shared access is configured explicitly after upgrading. See the [Android build/install guide](../android-kitchen/README.md).
 
 ## Common development problems
 

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
 	"reflect"
+	"shawarma/internal/database"
 	"strings"
 	"testing"
 	"time"
@@ -365,7 +367,7 @@ func TestUpgradeExistingSingleStoreData(t *testing.T) {
 		t.Fatal(e)
 	}
 	for _, file := range []string{"schema.sql", "migrations/002_shop.sql"} {
-		body, _ := migrations.ReadFile(file)
+		body, _ := fs.ReadFile(database.Sources(), file)
 		if _, e = s.DB.Exec(string(body)); e != nil {
 			t.Fatal(e)
 		}

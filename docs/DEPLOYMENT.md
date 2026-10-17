@@ -20,7 +20,7 @@ The known demonstration URL is <https://shawarma-ordering.netlify.app>. This doc
 Before real customer/staff data is used:
 
 - Confirm the operator's legal/payment details and approved privacy documents.
-- Verify Russian production processing/storage locations, including logs, backups, support access and contractors; see [privacy operations](../PRIVACY_OPERATIONS.md).
+- Verify Russian production processing/storage locations, including logs, backups, support access and contractors; see [privacy operations](PRIVACY_OPERATIONS.md).
 - Approve hosting, ownership of accounts/domain, costs, access and support arrangements.
 - Back up and rehearse migrations on an isolated database.
 - Create the owner and real staff assignments; test permissions and session persistence.
@@ -45,7 +45,7 @@ Netlify/Neon demonstration configuration does not resolve those requirements.
 
 `schema_migrations` records `schema.sql` and subsequent migrations. Add migrations; do not edit already-applied ones. Migration `003_access.sql` maps old data to original store 1 and revokes legacy shared sessions. Migration `004_privacy.sql` adds privacy structures and blocks new intake until document publication. It does not activate cleanup.
 
-Do not treat rolling back frontend files as a database rollback. Restoring an old snapshot also needs the [privacy restore gate](../PRIVACY_OPERATIONS.md#restore-without-resurrecting-erased-data).
+Do not treat rolling back frontend files as a database rollback. Restoring an old snapshot also needs the [privacy restore gate](PRIVACY_OPERATIONS.md#restore-without-resurrecting-erased-data).
 
 ## Existing Netlify and Neon demonstration
 

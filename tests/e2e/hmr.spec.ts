@@ -27,9 +27,9 @@ test('staff contexts survive repeated kitchen and provider hot updates', async (
     page.getByRole('heading', { name: 'Управление бизнесом', exact: true }),
   ).toBeVisible();
   for (const [file, needle] of [
-    ['pages/Kitchen.tsx', '<h1>Кухня</h1>'],
-    ['staff.tsx', 'className="staff-top"'],
-    ['ownerWorkspace.tsx', 'className="owner-header"'],
+    ['features/kitchen/Kitchen.tsx', '<h1>Кухня</h1>'],
+    ['features/auth/StaffTop.tsx', 'className="staff-top"'],
+    ['features/owner/OwnerLayout.tsx', 'className="owner-header"'],
   ]) {
     const path = join(root!, file),
       original = await readFile(path, 'utf8');
@@ -67,7 +67,7 @@ test('staff contexts survive repeated kitchen and provider hot updates', async (
   }
   await page.goto('/staff/stores/1');
   await expect(page.getByRole('heading', { name: 'Кухня', exact: true })).toBeVisible();
-  const path = join(root!, 'pages/Kitchen.tsx'),
+  const path = join(root!, 'features/kitchen/Kitchen.tsx'),
     original = await readFile(path, 'utf8');
   try {
     await writeFile(
@@ -103,7 +103,7 @@ test('route failures show a safe responsive recovery screen and preserve checkou
       }),
     );
   });
-  await page.route('**/src/pages/Shop.tsx*', async (route) => {
+  await page.route('**/src/features/catalog/Shop.tsx*', async (route) => {
     const response = await route.fetch();
     let body = await response.text();
     body = body.replace(
@@ -129,7 +129,7 @@ test('route failures show a safe responsive recovery screen and preserve checkou
   expect(
     await page.evaluate(() => JSON.parse(sessionStorage.getItem('shawarma-attempt-v3:1')!).key),
   ).toBe('a'.repeat(48));
-  await page.unroute('**/src/pages/Shop.tsx*');
+  await page.unroute('**/src/features/catalog/Shop.tsx*');
   await page.getByRole('button', { name: 'Обновить страницу', exact: true }).click();
   await expect(page.locator('.product-card').first()).toBeVisible();
 });
