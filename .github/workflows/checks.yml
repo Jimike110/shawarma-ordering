@@ -20,7 +20,11 @@ jobs:
             --mount type=bind,source="$PWD/dist",target=/usr/share/nginx/html,readonly \
             --mount type=bind,source="$PWD/nginx.conf",target=/etc/nginx/conf.d/default.conf,readonly \
             nginx:1.28-alpine
-          curl -fsS --retry 10 --retry-connrefused --retry-delay 1 --max-time 2 http://127.0.0.1:5184/ >/dev/null
+          # Docker can accept a connection before nginx is ready, then reset it.
+          if ! curl -fsS --retry 10 --retry-all-errors --retry-delay 1 --retry-max-time 30 --max-time 2 http://127.0.0.1:5184/ >/dev/null; then
+            docker logs shawarma-header-check
+            exit 1
+          fi
           HEADER_TEST_ORIGIN=http://127.0.0.1:5184 node --test scripts/customer-headers.test.mjs
   backend:
     runs-on: ubuntu-latest
